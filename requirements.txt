@@ -14,5 +14,9 @@ python-dotenv>=1.0
 pypdf>=4.2          # replaces the unmaintained PyPDF2
 python-docx>=1.1
 
-# --- Baseline (fallback + evaluation control) engine ---
+# --- Baseline engine, retrieval ranking, vector maths ---
 scikit-learn>=1.4
+numpy>=1.26
+
+# --- Job board ingestion ---
+requests>=2.31

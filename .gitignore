@@ -31,3 +31,6 @@ Thumbs.db
 # Runtime
 logs/
 *.log
+
+# Job index (rebuilt by the ingest command)
+data/

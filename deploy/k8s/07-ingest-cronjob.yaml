@@ -1,0 +1,61 @@
+# Nightly job ingestion.
+#
+# Runs the same command you run locally. Two properties make it safe to schedule:
+# postings are upserted by stable id (re-running is idempotent) and only rows
+# without a cached embedding are sent to the embedding API, so a run that hits
+# the daily quota simply resumes tomorrow where it stopped.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: job-ingest
+  namespace: resume-screener
+spec:
+  schedule: "0 3 * * *"          # 03:00 daily, off-peak
+  concurrencyPolicy: Forbid       # two ingests would race for the same quota
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          containers:
+            - name: ingest
+              image: ghcr.io/OWNER/resume-screener:latest
+              command: ["python", "-m", "resumescreener.jobs.ingest", "--limit", "800"]
+              envFrom:
+                - configMapRef:
+                    name: screener-config
+                - secretRef:
+                    name: screener-secrets
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  memory: "512Mi"
+              volumeMounts:
+                - name: job-data
+                  mountPath: /app/data
+          volumes:
+            # The app pods must read the same database this job writes, so the
+            # volume has to be ReadWriteMany or both must run on one node. At a
+            # larger scale this is the point where SQLite gives way to Postgres.
+            - name: job-data
+              persistentVolumeClaim:
+                claimName: job-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: job-data
+  namespace: resume-screener
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi

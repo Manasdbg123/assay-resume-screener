@@ -64,6 +64,19 @@
                 <p>Upload your CV and paste a job description to get an instant AI-powered compatibility score with actionable feedback.</p>
             </div>
 
+            <div class="mode-tabs" role="tablist" aria-label="What would you like to do?">
+                <button type="button" class="mode-tab active" id="mode-check"
+                        role="tab" aria-selected="true" data-mode="check">
+                    <span class="mode-tab-title">Check against a job</span>
+                    <span class="mode-tab-sub">Paste a job description, get a scored breakdown</span>
+                </button>
+                <button type="button" class="mode-tab" id="mode-discover"
+                        role="tab" aria-selected="false" data-mode="discover">
+                    <span class="mode-tab-title">Find matching jobs</span>
+                    <span class="mode-tab-sub">Search live postings for the best fits</span>
+                </button>
+            </div>
+
             <form id="analyze-form" class="analyze-form">
                 <div class="form-grid">
                     <!-- Resume Upload -->
@@ -132,6 +145,26 @@
                         <div class="char-count">
                             <span id="char-count">0</span> characters
                         </div>
+                    </div>
+                    <div class="form-card" id="discover-card" style="display: none;">
+                        <div class="card-header">
+                            <div class="card-icon jd-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                            </div>
+                            <h2>Find Matching Jobs</h2>
+                        </div>
+                        <p class="discover-blurb">
+                            We search live postings from company job boards, rank them
+                            against your CV, and score the strongest matches in detail.
+                        </p>
+                        <label class="discover-option">
+                            <input type="checkbox" id="remote-only" name="remote_only">
+                            <span>Remote roles only</span>
+                        </label>
+                        <p class="discover-note" id="job-index-note">Checking the job index...</p>
                     </div>
                 </div>
 
@@ -361,6 +394,31 @@
                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                 </svg>
                 Analyze Another Resume
+            </button>
+        </section>
+
+        <!-- Job match results (discover mode) -->
+        <section class="results-section" id="jobs-section" style="display: none;">
+            <div class="results-header">
+                <h2>Your Best Matches</h2>
+                <p class="results-filename" id="jobs-filename"></p>
+            </div>
+
+            <div class="jobs-summary" id="jobs-summary"></div>
+
+            <div class="degraded-notice" id="jobs-degraded" style="display: none;">
+                <strong>Partial results.</strong>
+                <span id="jobs-degraded-detail"></span>
+            </div>
+
+            <div class="jobs-list" id="jobs-list"></div>
+
+            <button class="analyze-another-btn" id="jobs-another-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="1 4 1 10 7 10"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                </svg>
+                Search Again
             </button>
         </section>
     </main>

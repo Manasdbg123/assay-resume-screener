@@ -1,0 +1,37 @@
+{
+  "_comment": "Company boards to ingest. Greenhouse and Lever expose these publicly with no API key. The token is the company's slug in its board URL - e.g. boards.greenhouse.io/stripe -> 'stripe'. Add or remove freely; a dead token is logged and skipped, it does not fail the run.",
+
+  "greenhouse": [
+    "stripe",
+    "databricks",
+    "figma",
+    "airtable",
+    "gitlab",
+    "reddit",
+    "discord",
+    "robinhood",
+    "instacart",
+    "doordash",
+    "flexport",
+    "asana",
+    "benchling",
+    "cloudflare",
+    "twilio",
+    "dropbox",
+    "grammarly",
+    "samsara",
+    "affirm",
+    "brex"
+  ],
+
+  "lever": [
+    "netflix",
+    "spotify",
+    "plaid",
+    "ramp",
+    "mistral",
+    "leadiq",
+    "voleon",
+    "attentive"
+  ]
+}

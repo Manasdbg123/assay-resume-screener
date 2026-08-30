@@ -27,7 +27,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const analyzeAnotherBtn = document.getElementById('analyze-another-btn');
     const progressBar = document.getElementById('progress-bar');
 
+    // Discover-mode elements
+    const modeTabs = document.querySelectorAll('.mode-tab');
+    const jdCard = document.getElementById('jd-card');
+    const discoverCard = document.getElementById('discover-card');
+    const jobsSection = document.getElementById('jobs-section');
+    const jobsAnotherBtn = document.getElementById('jobs-another-btn');
+    const jobIndexNote = document.getElementById('job-index-note');
+    const remoteOnly = document.getElementById('remote-only');
+
     let selectedFile = null;
+    // 'check' = CV against one pasted JD (the original flow, unchanged).
+    // 'discover' = CV against the indexed job corpus.
+    let mode = 'check';
 
     // --- Utility Functions ---
     function hideError() {
@@ -61,6 +73,43 @@ document.addEventListener('DOMContentLoaded', () => {
             progressBar.classList.add('active');
         } else {
             progressBar.classList.remove('active');
+        }
+    }
+
+    // --- Mode switching ---
+    function setMode(next) {
+        mode = next;
+        modeTabs.forEach((tab) => {
+            const active = tab.dataset.mode === next;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', String(active));
+        });
+        jdCard.style.display = next === 'check' ? '' : 'none';
+        discoverCard.style.display = next === 'discover' ? '' : 'none';
+        btnText.textContent = next === 'check' ? 'Analyze Resume' : 'Find Matching Jobs';
+        if (next === 'discover') loadJobIndexStatus();
+    }
+
+    modeTabs.forEach((tab) => tab.addEventListener('click', () => setMode(tab.dataset.mode)));
+
+    async function loadJobIndexStatus() {
+        // Tell the user up front whether anything is indexed - an empty index is
+        // a setup step they have to run, not a bug in the search.
+        try {
+            const res = await fetch('/jobs/stats');
+            const stats = await res.json();
+            if (!stats.embedded) {
+                jobIndexNote.textContent =
+                    'No jobs indexed yet. Run: python -m resumescreener.jobs.ingest';
+                jobIndexNote.classList.add('warn');
+            } else {
+                jobIndexNote.textContent =
+                    `Searching ${stats.embedded.toLocaleString()} indexed postings.`;
+                jobIndexNote.classList.remove('warn');
+            }
+        } catch {
+            jobIndexNote.textContent = 'Could not reach the job index.';
+            jobIndexNote.classList.add('warn');
         }
     }
 
@@ -171,30 +220,29 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const jd = jobDescription.value.trim();
-        if (!jd) {
-            showError('Please enter a job description.');
-            return;
-        }
-
-        if (jd.length < 40) {
-            showError('Job description is too short - please paste at least 40 characters.');
-            return;
-        }
-
-        // Show loading
-        setLoading(true);
-
         const formData = new FormData();
         formData.append('resume', selectedFile);
-        formData.append('job_description', jd);
+
+        if (mode === 'check') {
+            const jd = jobDescription.value.trim();
+            if (!jd) {
+                showError('Please enter a job description.');
+                return;
+            }
+            if (jd.length < 40) {
+                showError('Job description is too short - please paste at least 40 characters.');
+                return;
+            }
+            formData.append('job_description', jd);
+        } else {
+            formData.append('remote_only', remoteOnly.checked ? 'true' : 'false');
+        }
+
+        setLoading(true);
+        const endpoint = mode === 'check' ? '/analyze' : '/match-jobs';
 
         try {
-            const response = await fetch('/analyze', {
-                method: 'POST',
-                body: formData
-            });
-
+            const response = await fetch(endpoint, { method: 'POST', body: formData });
             const data = await response.json();
 
             if (!response.ok) {
@@ -203,10 +251,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Small delay for progress bar to complete
             setTimeout(() => {
                 setLoading(false);
-                renderResults(data);
+                if (mode === 'check') {
+                    renderResults(data);
+                } else {
+                    renderJobMatches(data);
+                }
             }, 300);
         } catch (err) {
             showError('Network error. Please check your connection and try again.');
@@ -358,6 +409,193 @@ document.addEventListener('DOMContentLoaded', () => {
         span.textContent = text;
         return span;
     }
+
+    // --- Render Job Matches (discover mode) ---
+    //
+    // Same rule as the single-JD view: every string here originates from a job
+    // board or the model, so it is written with textContent, never innerHTML.
+
+    function renderJobMatches(payload) {
+        uploadSection.classList.add('section-exit');
+        setTimeout(() => {
+            uploadSection.style.display = 'none';
+            uploadSection.classList.remove('section-exit');
+            jobsSection.style.display = 'block';
+            jobsSection.classList.add('section-enter');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            document.getElementById('jobs-filename').textContent =
+                `Matched against: ${payload.filename || 'your resume'}`;
+
+            const summary = document.getElementById('jobs-summary');
+            summary.textContent =
+                `${payload.matches.length} matches from ` +
+                `${payload.total_candidates_considered.toLocaleString()} postings \u00b7 ` +
+                `${payload.llm_scored_count} scored in detail by ` +
+                `${payload.engine === 'baseline' ? 'keyword matching' : payload.engine}`;
+
+            // Say which stage degraded, not just that something did. "The AI was
+            // unavailable" is wrong when the AI scored jobs fine and it was the
+            // embedding ranker that fell back.
+            const degradedBox = document.getElementById('jobs-degraded');
+            degradedBox.style.display = payload.degraded ? 'block' : 'none';
+            if (payload.degraded) {
+                const reasons = [];
+                if (payload.ranker === 'tfidf') {
+                    reasons.push('Ranking fell back to keyword overlap because the ' +
+                                 'semantic search was unavailable, so the ordering is rougher than usual.');
+                }
+                if (!payload.llm_scored_count) {
+                    reasons.push('No job could be scored in detail, so every score below ' +
+                                 'is keyword-based.');
+                } else if (payload.llm_scored_count < 3) {
+                    reasons.push(`Only ${payload.llm_scored_count} job(s) could be scored in ` +
+                                 'detail before the AI quota ran out.');
+                }
+                document.getElementById('jobs-degraded-detail').textContent =
+                    reasons.join(' ') || 'Some results were produced by the fallback engine.';
+            }
+
+            const list = document.getElementById('jobs-list');
+            list.innerHTML = '';
+
+            if (!payload.matches.length) {
+                list.appendChild(noItems('No matching jobs found. Try widening your filters.'));
+            }
+            payload.matches.forEach((match, i) => list.appendChild(buildJobCard(match, i)));
+
+            setTimeout(() => jobsSection.classList.remove('section-enter'), 700);
+        }, 400);
+    }
+
+    function buildJobCard(match, index) {
+        const job = match.job;
+        const card = document.createElement('article');
+        card.className = 'job-card';
+        card.style.animationDelay = `${Math.min(index * 0.05, 0.8)}s`;
+
+        // --- score ---
+        const score = document.createElement('div');
+        score.className = 'job-score';
+        const band = match.match_score >= 80 ? 'strong'
+                   : match.match_score >= 65 ? 'good'
+                   : match.match_score >= 45 ? 'fair' : 'weak';
+        score.classList.add(`job-score-${band}`);
+        score.textContent = Math.round(match.match_score);
+
+        // --- header ---
+        const body = document.createElement('div');
+        body.className = 'job-body';
+
+        const title = document.createElement('h3');
+        title.className = 'job-title';
+        if (job.url) {
+            const link = document.createElement('a');
+            link.href = job.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';   // never hand the opener window over
+            link.textContent = job.title;
+            title.appendChild(link);
+        } else {
+            title.textContent = job.title;
+        }
+
+        const meta = document.createElement('p');
+        meta.className = 'job-meta';
+        meta.textContent = [job.company, job.location].filter(Boolean).join(' \u00b7 ');
+
+        const badges = document.createElement('div');
+        badges.className = 'job-badges';
+
+        // Provenance again: a detailed LLM judgement and a keyword tally must
+        // never look the same to someone deciding where to apply.
+        const how = document.createElement('span');
+        how.className = `job-badge job-badge-${match.scored_by}`;
+        how.textContent = match.scored_by === 'llm' ? 'Scored in detail' : 'Keyword ranked';
+        badges.appendChild(how);
+
+        if (job.remote) {
+            const remote = document.createElement('span');
+            remote.className = 'job-badge job-badge-remote';
+            remote.textContent = 'Remote';
+            badges.appendChild(remote);
+        }
+        const source = document.createElement('span');
+        source.className = 'job-badge job-badge-source';
+        source.textContent = job.source;
+        badges.appendChild(source);
+
+        body.append(title, meta, badges);
+
+        if (match.result && match.result.summary) {
+            const summary = document.createElement('p');
+            summary.className = 'job-summary';
+            summary.textContent = match.result.summary;
+            body.appendChild(summary);
+        }
+
+        if (match.result) {
+            body.appendChild(buildJobDetails(match.result));
+        }
+
+        card.append(score, body);
+        return card;
+    }
+
+    function buildJobDetails(result) {
+        const details = document.createElement('details');
+        details.className = 'job-details';
+
+        const summary = document.createElement('summary');
+        summary.textContent = 'Why this match';
+        details.appendChild(summary);
+
+        const matched = (result.matched_skills || []).slice(0, 10);
+        const missing = (result.missing_skills || []).slice(0, 10);
+
+        [['Matched', matched, 'matched'], ['Missing', missing, 'missing']].forEach(
+            ([label, items, cls]) => {
+                if (!items.length) return;
+                const row = document.createElement('div');
+                row.className = 'job-skill-row';
+
+                const heading = document.createElement('span');
+                heading.className = 'job-skill-label';
+                heading.textContent = label;
+                row.appendChild(heading);
+
+                items.forEach((skill) => {
+                    const tag = document.createElement('span');
+                    tag.className = `skill-tag ${cls}`;
+                    tag.textContent = skill;
+                    row.appendChild(tag);
+                });
+                details.appendChild(row);
+            },
+        );
+
+        (result.skill_evidence || []).filter((e) => e.present).slice(0, 3).forEach((e) => {
+            if (!e.evidence) return;
+            const quote = document.createElement('p');
+            quote.className = 'job-evidence';
+            quote.textContent = `${e.skill}: ${e.evidence}`;
+            details.appendChild(quote);
+        });
+
+        return details;
+    }
+
+    jobsAnotherBtn.addEventListener('click', () => {
+        jobsSection.classList.add('section-exit');
+        setTimeout(() => {
+            jobsSection.style.display = 'none';
+            jobsSection.classList.remove('section-exit');
+            uploadSection.style.display = 'block';
+            uploadSection.classList.add('section-enter');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => uploadSection.classList.remove('section-enter'), 700);
+        }, 400);
+    });
 
     function addScoreGradient(score) {
         const existing = document.getElementById('score-gradient-defs');

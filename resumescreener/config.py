@@ -60,6 +60,22 @@ class Config:
         default_factory=lambda: float(os.environ.get("GEMINI_TEMPERATURE", "0.2"))
     )
 
+    # --- Job matching ---
+    embedding_model: str = field(
+        default_factory=lambda: os.environ.get("EMBEDDING_MODEL", "gemini-embedding-001")
+    )
+    job_db_path: str = field(
+        default_factory=lambda: os.environ.get("JOB_DB_PATH", "data/jobs.db")
+    )
+    # Funnel widths. Retrieval is free, so it stays wide; the LLM stage is the
+    # expensive one, so it stays narrow.
+    job_retrieval_limit: int = field(default_factory=lambda: _int("JOB_RETRIEVAL_LIMIT", 2000))
+    job_shortlist_size: int = field(default_factory=lambda: _int("JOB_SHORTLIST_SIZE", 30))
+    job_llm_scored_count: int = field(default_factory=lambda: _int("JOB_LLM_SCORED_COUNT", 10))
+    # Concurrent LLM calls in stage 3. Too high trips provider rate limits, which
+    # on a free tier means every call fails instead of just being slow.
+    job_llm_concurrency: int = field(default_factory=lambda: _int("JOB_LLM_CONCURRENCY", 5))
+
     # --- Claude ---
     anthropic_api_key: str = field(
         default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", "")

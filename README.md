@@ -1,9 +1,15 @@
 # ResumeAI — AI-Powered Resume Screener
 
-Screens a resume against a job description using **Gemini** (or Claude — one config
-line switches providers), returns an evidence-backed judgement, and ships structured
-logs to an ELK stack. Runs locally with no Docker required; Kubernetes manifests are
-included for when you deploy it.
+Two things, sharing one evidence-based scoring engine:
+
+1. **Check** — paste a job description, get a scored breakdown with a quote from your
+   CV behind every judgement.
+2. **Discover** — upload only your CV and get back the best matches from thousands of
+   live job postings, ranked and scored.
+
+Powered by **Gemini** (or Claude — one config line switches providers), with structured
+logs shipped to an ELK stack. Runs locally with no Docker required; Kubernetes manifests
+are included for when you deploy it.
 
 The distinguishing feature is not the model — it is the **evaluation harness**. The
 project keeps a keyword-matching baseline alongside the AI engine and measures both
@@ -15,6 +21,7 @@ repository rather than a claim in a README.
 ## Contents
 
 - [What it does](#what-it-does)
+- [Job discovery](#job-discovery)
 - [Does the AI actually help?](#does-the-ai-actually-help)
 - [Architecture](#architecture)
 - [Quick start (no Docker)](#quick-start-no-docker)
@@ -98,6 +105,68 @@ One real weakness the numbers do show: an **MAE of 9.0 with perfect ranking** me
 Gemini is systematically optimistic on strong candidates (98 vs. 88, 96 vs. 86, 94 vs.
 85). Ordering is right, calibration runs hot. If you use absolute score thresholds
 rather than ranking, calibrate them against your own labels first.
+
+---
+
+## Job discovery
+
+Upload a CV, get the roles it matches best from a live corpus of real postings.
+
+### Where the jobs come from
+
+Ingested from public, keyless company boards — **no scraping, no ToS violations**:
+
+| Source | Postings fetched | Notes |
+|---|---|---|
+| Greenhouse | 3,788 | ~20 company boards, full JD text |
+| Lever | 89 | Same model, different companies |
+| Remotive | 19 | Remote tech roles |
+
+Edit [`companies.json`](resumescreener/jobs/companies.json) to change coverage. A dead
+board is logged and skipped, never fatal.
+
+```bash
+python -m resumescreener.jobs.ingest          # fetch + embed
+python -m resumescreener.jobs.ingest --stats  # what is indexed
+```
+
+### The funnel
+
+Scoring 30 jobs with an LLM would take seven minutes and exhaust a free-tier day on a
+single upload. So the expensive engine is spent only where the cheap stages already
+agree:
+
+| Stage | Method | Narrows | Cost |
+|---|---|---|---|
+| 1. Retrieve | SQLite query + filters | thousands → ~2,000 | free |
+| 2. Rank | Hybrid: embeddings + skill overlap | ~2,000 → 30 | 1 API call |
+| 3. Judge | The same LLM screener as `/analyze` | 30 → top 10 | ~10 calls, concurrent |
+| 4. Tail | The baseline keyword engine | the rest | free |
+
+Every job embedding is **cached in SQLite forever**, so a posting is embedded once, not
+once per user who searches. That is what makes the cost amortize to nothing.
+
+Results are labelled by how they were scored — `Scored in detail` versus
+`Keyword ranked` — because a reasoned judgement and a keyword tally should never look
+identical to someone deciding where to apply.
+
+### Retrieval evaluation
+
+```bash
+python -m eval.evaluate_retrieval --distractors 300
+```
+
+Measures whether the ranker surfaces the right job, using **hard negatives**: the real
+postings most semantically similar to each target, not an arbitrary sample. Reports
+recall@k, MRR, and a forced-choice accuracy (rank the three target JDs against each
+other only — chance is 0.333).
+
+**Current result: hybrid and TF-IDF tie at 1.0 on every metric.** That is a statement
+about the benchmark, not a victory. Distinguishing backend from frontend from devops is
+coarse enough that term overlap already solves it. The embedding ranker would need finer
+distinctions — backend-payments versus backend-infrastructure — to show its value, and
+building that test set is the honest next step. Until then the hybrid ranker is not
+demonstrated to beat free TF-IDF, and the README should not pretend otherwise.
 
 ---
 
