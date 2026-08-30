@@ -1,0 +1,18 @@
+# --- Core application ---
+flask>=3.0,<4.0
+gunicorn>=22.0
+pydantic>=2.7,<3.0
+
+# --- LLM providers (install the one your LLM_PROVIDER points at; both is fine) ---
+google-genai>=1.0        # LLM_PROVIDER=gemini
+anthropic>=0.40          # LLM_PROVIDER=claude
+
+# --- Local configuration ---
+python-dotenv>=1.0
+
+# --- Document parsing ---
+pypdf>=4.2          # replaces the unmaintained PyPDF2
+python-docx>=1.1
+
+# --- Baseline (fallback + evaluation control) engine ---
+scikit-learn>=1.4

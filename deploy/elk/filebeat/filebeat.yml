@@ -1,0 +1,49 @@
+# Filebeat: harvests container stdout and ships it to Logstash.
+#
+# The app writes one JSON object per line to stdout (see logging_config.py), so
+# Filebeat parses the JSON itself rather than shipping raw strings for Logstash
+# to regex. That keeps the grok-free pipeline fast and the field names stable.
+
+filebeat.inputs:
+  - type: container
+    enabled: true
+    paths:
+      - /var/lib/docker/containers/*/*.log
+    # Multi-line stack traces from a non-JSON logger would otherwise arrive as
+    # one event per line.
+    multiline.type: pattern
+    multiline.pattern: '^[[:space:]]+(at|\.{3})[[:space:]]|^Caused by:'
+    multiline.negate: false
+    multiline.match: after
+
+processors:
+  # Drop Filebeat's own logs - shipping them creates a feedback loop.
+  - drop_event:
+      when:
+        contains:
+          container.image.name: "filebeat"
+
+  # The app's message field is itself JSON; lift it into real fields.
+  - decode_json_fields:
+      fields: ["message"]
+      target: ""
+      overwrite_keys: true
+      add_error_key: true
+      max_depth: 2
+
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+
+  - add_fields:
+      target: ""
+      fields:
+        pipeline.source: filebeat
+
+output.logstash:
+  hosts: ["logstash:5044"]
+  # Back-pressure rather than data loss if Logstash is slow.
+  bulk_max_size: 2048
+  ttl: 30s
+
+logging.level: info
+logging.to_files: false

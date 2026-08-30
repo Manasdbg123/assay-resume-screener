@@ -1,0 +1,111 @@
+# Full local stack: the app plus the ELK pipeline that observes it.
+#
+# NOTE: this file requires Docker. If you cannot install Docker, the app runs
+# perfectly well without it - see "Running without Docker" in the README. These
+# files are kept so the stack is ready the moment Docker is available.
+#
+#   docker compose up -d --build
+#   app     -> http://localhost:8000
+#   kibana  -> http://localhost:5601
+#
+# Elasticsearch security is disabled here deliberately - this is a local
+# development stack, not a deployment target. See deploy/k8s/ for the real thing.
+
+name: resume-screener
+
+services:
+  app:
+    build: .
+    container_name: screener-app
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5}
+      CLAUDE_EFFORT: ${CLAUDE_EFFORT:-medium}
+      SECRET_KEY: ${SECRET_KEY:-local-dev-secret}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      JSON_LOGS: "true"
+      APP_ENV: local
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      # Filebeat uses this to pick the app's logs out of every container's.
+      app: resume-screener
+    networks: [screener]
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    container_name: screener-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    networks: [screener]
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.14.3
+    container_name: screener-logstash
+    volumes:
+      - ./deploy/elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./deploy/elk/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    environment:
+      - "LS_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "5044:5044"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks: [screener]
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.3
+    container_name: screener-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks: [screener]
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.14.3
+    container_name: screener-filebeat
+    # Filebeat must read other containers' log files and the Docker socket.
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./deploy/elk/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - filebeat-data:/usr/share/filebeat/data
+    depends_on:
+      - logstash
+      - app
+    networks: [screener]
+
+volumes:
+  es-data:
+  filebeat-data:
+
+networks:
+  screener:
+    driver: bridge

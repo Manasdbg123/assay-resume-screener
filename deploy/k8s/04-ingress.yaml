@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resume-screener
+  namespace: resume-screener
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"    # must match MAX_UPLOAD_BYTES
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180" # screening is slow
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - screener.example.com
+      secretName: screener-tls
+  rules:
+    - host: screener.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: resume-screener
+                port:
+                  name: http

@@ -1,0 +1,7 @@
+{
+  "backend_senior": "Senior Backend Engineer\n\nWe run a payments platform handling 40M transactions a month. You will own the core ledger service and its API surface.\n\nRequirements:\n- 5+ years building production Python services\n- Deep PostgreSQL: schema design, query optimisation, migrations under load\n- Kubernetes and Docker in production\n- AWS\n- Experience with financial or transactional systems is a strong plus\n- Bachelor's degree in Computer Science or equivalent practical experience",
+
+  "frontend_mid": "Frontend Engineer (Mid-level)\n\nYou will build the customer dashboard for our analytics product, working closely with design.\n\nRequirements:\n- 3+ years of React in production\n- TypeScript\n- Strong CSS and responsive layout skills\n- Experience with data visualisation libraries\n- Familiarity with accessibility standards (WCAG)\n- Testing with Jest or similar",
+
+  "devops_platform": "Platform / DevOps Engineer\n\nYou will own our Kubernetes platform and the observability stack that four product teams depend on.\n\nRequirements:\n- 4+ years in platform, SRE, or DevOps roles\n- Kubernetes at production scale\n- Terraform\n- Building and running logging pipelines (ELK, Loki, or equivalent)\n- CI/CD pipeline ownership\n- Strong Linux fundamentals\n- Scripting in Python, Go, or Bash"
+}

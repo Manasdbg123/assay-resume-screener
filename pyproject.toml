@@ -1,0 +1,22 @@
+[project]
+name = "resume-screener"
+version = "2.0.0"
+description = "AI-powered resume screening with Claude, evaluated against a keyword baseline."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [".venv", "venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4"]
+ignore = ["E501"]   # line length is handled by the formatter
+
+[tool.coverage.run]
+source = ["resumescreener"]
+omit = ["*/__init__.py"]

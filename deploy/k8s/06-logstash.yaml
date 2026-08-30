@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-pipeline
+  namespace: resume-screener
+data:
+  # Keep in sync with deploy/elk/logstash/pipeline/screener.conf.
+  screener.conf: |
+    input { beats { port => 5044 } }
+
+    filter {
+      date { match => ["@timestamp", "ISO8601"] target => "@timestamp" }
+
+      if [overall_score] {
+        ruby {
+          code => '
+            score = event.get("overall_score").to_f
+            bucket = case score
+                     when 80..100 then "80-100 strong"
+                     when 65...80 then "65-79 match"
+                     when 45...65 then "45-64 partial"
+                     else "0-44 weak"
+                     end
+            event.set("score_bucket", bucket)
+          '
+        }
+        mutate { add_tag => ["screening"] }
+      }
+
+      if [degraded] == true { mutate { add_tag => ["degraded"] } }
+      if [log][level] in ["ERROR", "CRITICAL"] { mutate { add_tag => ["alertable"] } }
+    }
+
+    output {
+      if "screening" in [tags] {
+        elasticsearch {
+          hosts => ["http://elasticsearch.resume-screener.svc.cluster.local:9200"]
+          index => "screenings-%{+YYYY.MM.dd}"
+        }
+      } else {
+        elasticsearch {
+          hosts => ["http://elasticsearch.resume-screener.svc.cluster.local:9200"]
+          index => "app-logs-%{+YYYY.MM.dd}"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: resume-screener
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      containers:
+        - name: logstash
+          image: docker.elastic.co/logstash/logstash:8.14.3
+          ports:
+            - name: beats
+              containerPort: 5044
+          env:
+            - name: LS_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "1Gi"
+            limits:
+              memory: "1536Mi"
+          volumeMounts:
+            - name: pipeline
+              mountPath: /usr/share/logstash/pipeline
+      volumes:
+        - name: pipeline
+          configMap:
+            name: logstash-pipeline
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  namespace: resume-screener
+spec:
+  selector:
+    app: logstash
+  ports:
+    - name: beats
+      port: 5044
+      targetPort: beats

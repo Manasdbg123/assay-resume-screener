@@ -1,0 +1,43 @@
+# Filebeat configuration for the Kubernetes DaemonSet (deploy/k8s/filebeat.yaml).
+#
+# Differs from the Docker Compose config in how it discovers logs: it uses the
+# container input against the kubelet log directory and enriches events with pod,
+# namespace, and label metadata so Kibana can filter by workload.
+
+filebeat.inputs:
+  - type: container
+    paths:
+      - /var/log/containers/*.log
+    processors:
+      - add_kubernetes_metadata:
+          host: ${NODE_NAME}
+          matchers:
+            - logs_path:
+                logs_path: "/var/log/containers/"
+
+processors:
+  # Only ship the application's own logs. Without this the cluster's system
+  # namespaces flood the index.
+  - drop_event:
+      when:
+        not:
+          equals:
+            kubernetes.labels.app: "resume-screener"
+
+  - decode_json_fields:
+      fields: ["message"]
+      target: ""
+      overwrite_keys: true
+      add_error_key: true
+      max_depth: 2
+
+  - add_fields:
+      target: ""
+      fields:
+        pipeline.source: filebeat-k8s
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: info
+logging.to_files: false

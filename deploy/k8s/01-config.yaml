@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: screener-config
+  namespace: resume-screener
+data:
+  LLM_PROVIDER: "gemini"
+  GEMINI_MODEL: "gemini-3.5-flash"
+  GEMINI_TEMPERATURE: "0.2"
+  CLAUDE_MODEL: "claude-opus-5"
+  CLAUDE_EFFORT: "medium"
+  CLAUDE_MAX_TOKENS: "8000"
+  CLAUDE_TIMEOUT_SECONDS: "120"
+  CLAUDE_MAX_RETRIES: "3"
+  LLM_ENABLED: "true"
+  FALLBACK_TO_BASELINE: "true"
+  LOG_LEVEL: "INFO"
+  JSON_LOGS: "true"
+  SERVICE_NAME: "resume-screener"
+  APP_ENV: "production"
+---
+# Created out-of-band, never committed:
+#   kubectl create secret generic screener-secrets \
+#     --namespace resume-screener \
+#     --from-literal=GEMINI_API_KEY="..." \
+#     --from-literal=SECRET_KEY="$(openssl rand -hex 32)"
+#
+# This stub documents the expected shape. Applying it creates an EMPTY secret -
+# the deployment will start in degraded (baseline) mode until it is populated.
+# Only the key for the selected LLM_PROVIDER needs a value.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: screener-secrets
+  namespace: resume-screener
+type: Opaque
+stringData:
+  GEMINI_API_KEY: ""
+  ANTHROPIC_API_KEY: ""
+  SECRET_KEY: ""

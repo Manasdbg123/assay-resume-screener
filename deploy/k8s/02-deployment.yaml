@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resume-screener
+  namespace: resume-screener
+  labels:
+    app: resume-screener
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # never lose capacity during a rollout
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: resume-screener
+  template:
+    metadata:
+      labels:
+        app: resume-screener   # filebeat-k8s.yml filters on this label
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ghcr.io/OWNER/resume-screener:latest   # set by CI
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: screener-config
+            - secretRef:
+                name: screener-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              # No CPU limit on purpose: throttling a request that is blocked on
+              # the Claude API only adds latency. Memory is capped because a leak
+              # should kill the pod rather than the node.
+              memory: "512Mi"
+          # Liveness must not depend on Claude - a provider outage would
+          # otherwise restart every pod in a loop while the fallback engine is
+          # still serving traffic perfectly well.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # A screening request can run for 60s+. Give in-flight work time to
+          # finish before the pod goes away.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      terminationGracePeriodSeconds: 90
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: resume-screener
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: resume-screener
+  namespace: resume-screener
+spec:
+  type: ClusterIP
+  selector:
+    app: resume-screener
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: resume-screener
+  namespace: resume-screener
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: resume-screener

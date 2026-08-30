@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        # The suite stubs both the Gemini and Anthropic clients, so CI needs no
+        # API key and spends nothing. A test that reaches the network is a bug.
+        run: pytest --cov=resumescreener --cov-report=term-missing --cov-fail-under=75
+
+      - name: Baseline evaluation
+        # Runs the free engine over the labelled set. This is a regression guard:
+        # if a change to the matcher makes ranking worse, it shows up here.
+        run: python -m eval.evaluate --engine baseline
+
+  yaml:
+    name: Validate manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Kubernetes manifests
+        uses: instrumenta/kubeval-action@master
+        with:
+          files: deploy/k8s
+
+      - name: Validate compose file
+        run: docker compose config --quiet
+
+      - name: Validate YAML parses
+        # Guards the ELK configs too, which kubeval does not cover.
+        run: |
+          python -m pip install pyyaml
+          python -c "
+          import glob, yaml
+          for f in glob.glob('deploy/**/*.y*ml', recursive=True):
+              list(yaml.safe_load_all(open(f, encoding='utf-8')))
+              print('ok', f)
+          "
+
+  build:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    needs: [test, yaml]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
