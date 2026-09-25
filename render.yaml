@@ -1,0 +1,29 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# New > Blueprint in the Render dashboard, pick this repo, and it deploys.
+services:
+  - type: web
+    name: resumeai
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /healthz
+    # One worker keeps the free instance inside 512 MB; threads carry concurrency.
+    dockerCommand: >-
+      gunicorn wsgi:app --bind 0.0.0.0:8000 --workers 1 --threads 8
+      --worker-class gthread --timeout 180 --access-logfile - --error-logfile -
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: SECRET_KEY
+        generateValue: true
+      # Fetch every configured job board at startup and every 6 hours. The free
+      # disk is wiped on restart, so the store refills itself this way.
+      - key: JOB_REFRESH_HOURS
+        value: "6"
+      - key: JOB_DB_PATH
+        value: /tmp/jobs.db
+      - key: JSON_LOGS
+        value: "true"
+      # Optional. Without it scoring uses the keyword baseline; with it, Gemini.
+      - key: GEMINI_API_KEY
+        sync: false

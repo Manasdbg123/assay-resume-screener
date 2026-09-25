@@ -1,11 +1,14 @@
 # ResumeAI — AI-Powered Resume Screener
 
-Two things, sharing one evidence-based scoring engine:
+Three things, sharing one evidence-based scoring engine:
 
 1. **Check** — paste a job description, get a scored breakdown with a quote from your
    CV behind every judgement.
 2. **Discover** — upload only your CV and get back the best matches from thousands of
    live job postings, ranked and scored.
+3. **Browse** — no CV needed. Search every indexed posting, or type **any company name**
+   and get all of its current openings live from its job board. Any posting is one click
+   from a full Check.
 
 Powered by **Gemini** (or Claude — one config line switches providers), with structured
 logs shipped to an ELK stack. Runs locally with no Docker required; Kubernetes manifests
@@ -22,11 +25,13 @@ repository rather than a claim in a README.
 
 - [What it does](#what-it-does)
 - [Job discovery](#job-discovery)
+- [Browse every job at any company](#browse-every-job-at-any-company)
 - [Does the AI actually help?](#does-the-ai-actually-help)
 - [Architecture](#architecture)
 - [Quick start (no Docker)](#quick-start-no-docker)
 - [Running without Docker](#running-without-docker)
 - [Running the full stack with Docker](#running-the-full-stack-with-docker)
+- [Deploying to Render](#deploying-to-render)
 - [Deploying to Kubernetes](#deploying-to-kubernetes)
 - [Observability](#observability)
 - [Configuration](#configuration)
@@ -114,20 +119,27 @@ Upload a CV, get the roles it matches best from a live corpus of real postings.
 
 ### Where the jobs come from
 
-Ingested from public, keyless company boards — **no scraping, no ToS violations**:
+Ingested from public, keyless feeds — **no scraping, no ToS violations**:
 
-| Source | Postings fetched | Notes |
+| Source | Kind | Notes |
 |---|---|---|
-| Greenhouse | 3,788 | ~20 company boards, full JD text |
-| Lever | 89 | Same model, different companies |
-| Remotive | 19 | Remote tech roles |
+| Greenhouse | Company boards | Full JD text; ~40 companies preconfigured |
+| Lever | Company boards | Requirements arrive as separate lists and are stitched back in |
+| Ashby | Company boards | Includes compensation bands where the company publishes them |
+| Workable | Company boards | |
+| SmartRecruiters | Company boards | Descriptions need one extra request per posting (capped) |
+| Recruitee | Company boards | |
+| Remotive | Aggregator | Remote tech roles |
+| Arbeitnow | Aggregator | Many companies per request, strongest in Europe |
 
-Edit [`companies.json`](resumescreener/jobs/companies.json) to change coverage. A dead
-board is logged and skipped, never fatal.
+Edit [`companies.json`](resumescreener/jobs/companies.json) to change which companies are
+ingested in bulk. A dead board is logged and skipped, never fatal. Companies that are
+not listed can still be fetched on demand (next section).
 
 ```bash
-python -m resumescreener.jobs.ingest          # fetch + embed
-python -m resumescreener.jobs.ingest --stats  # what is indexed
+python -m resumescreener.jobs.ingest                      # fetch + embed
+python -m resumescreener.jobs.ingest --stats              # what is indexed
+python -m resumescreener.jobs.ingest --company "Notion"   # one company, any ATS
 ```
 
 ### The funnel
@@ -167,6 +179,48 @@ coarse enough that term overlap already solves it. The embedding ranker would ne
 distinctions — backend-payments versus backend-infrastructure — to show its value, and
 building that test set is the honest next step. Until then the hybrid ranker is not
 demonstrated to beat free TF-IDF, and the README should not pretend otherwise.
+
+---
+
+## Browse every job at any company
+
+The **Browse jobs** tab needs no CV. It has two parts.
+
+**Search the index.** Every stored posting, filterable by keyword, location, company,
+job board, remote and posting date, sorted by recency with title matches first. Click a
+posting for the full description, an apply link, and a **Score my CV for this role**
+button that loads it straight into Check.
+
+**Find a company.** Type a company name — or paste its careers-page URL — and the app
+fetches every current opening that company has, live:
+
+1. The name becomes a few likely board slugs: `Hugging Face, Inc.` → `huggingface`,
+   `hugging-face`, `HuggingFace`. A careers URL (`jobs.ashbyhq.com/openai`,
+   `boards.greenhouse.io/stripe`, `acme.recruitee.com`, …) skips the guessing.
+2. All six ATSs are asked about every slug, **in parallel**.
+3. Whatever answers is written to the store, **replacing that board's previous
+   postings** — a role that has been filled disappears instead of lingering.
+4. The lookup is cached for `JOB_LOOKUP_CACHE_HOURS` (default 6), so a repeat search is
+   answered from SQLite.
+
+Looked-up postings become browsable and, after the next `--embed-only` run, matchable in
+Discover too.
+
+**What it cannot reach**, stated plainly: companies whose careers site runs on Workday,
+Taleo, iCIMS or a home-grown system. Those have no public feed, and scraping them is out
+of scope for the same reasons LinkedIn is. "Any company" means any company on one of the
+six supported applicant-tracking systems — which covers most tech companies and many
+beyond.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /jobs?q=&company=&location=&remote=&source=&days=&sort=&page=` | Browse and filter |
+| `GET /jobs/detail?id=` | One posting, full text |
+| `GET /jobs/companies?q=` | Companies in the index with open-role counts |
+| `POST /jobs/lookup` `{"company": "..."}` | Fetch one company's current openings live |
+
+Company slugs are validated against a strict alphabet before they reach a URL, so the
+lookup endpoint cannot be used to make the server request an arbitrary host.
 
 ---
 
@@ -292,6 +346,23 @@ and Filebeat decodes it at the edge.
 
 ---
 
+## Deploying to Render
+
+[`render.yaml`](render.yaml) deploys the app as a single web service, on the free plan:
+
+1. Sign in at [render.com](https://render.com) with GitHub.
+2. **New → Blueprint**, pick this repository, and click **Apply**.
+3. Optionally add `GEMINI_API_KEY` under the service's **Environment** tab for AI scoring.
+   Without it every feature still works, with keyword scoring.
+
+The service sets `JOB_REFRESH_HOURS=6`, so it fetches real openings from every board in
+`companies.json` when it starts and every six hours after. On the free plan the disk is
+wiped on restart and the instance sleeps when idle, so the first visit after a sleep
+takes about 30 seconds and the job list refills within a minute or two. The Browse tab
+says so while it does, and **Find a company** always fetches live regardless.
+
+---
+
 ## Deploying to Kubernetes
 
 ```bash
@@ -353,6 +424,9 @@ Environment-driven, loaded from `.env` when present — see [`.env.example`](.en
 | `FALLBACK_TO_BASELINE` | `true` | `false` makes an LLM outage a 503 instead |
 | `LOG_FILE` | — | Also write JSON logs to a rotating file |
 | `JSON_LOGS` | `true` | `false` for readable local development logs |
+| `JOB_DB_PATH` | `data/jobs.db` | SQLite file holding postings, embeddings and lookups |
+| `JOB_REFRESH_HOURS` | `0` | Fetch every board in the background at startup and every N hours; `0` leaves it to the CLI or CronJob |
+| `JOB_LOOKUP_CACHE_HOURS` | `6` | How long a company lookup is answered from the store before re-fetching |
 
 ---
 

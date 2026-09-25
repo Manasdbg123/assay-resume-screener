@@ -83,6 +83,13 @@ def match_jobs(
         remote_only=remote_only, sources=sources, limit=config.job_retrieval_limit
     )
     if not postings:
+        # Nothing embedded yet (no key, or ingest has not reached it): match on
+        # keywords over everything stored rather than refusing outright.
+        postings, matrix = store.load_for_matching(
+            remote_only=remote_only, sources=sources, limit=config.job_retrieval_limit,
+            embedded_only=False,
+        )
+    if not postings:
         return JobMatchResponse(
             matches=[], filename=filename, total_candidates_considered=0,
             llm_scored_count=0, ranker="none", engine=config.llm_provider,
@@ -92,6 +99,8 @@ def match_jobs(
     # --- stage 2: rank ---
     degraded = False
     try:
+        if matrix is None:
+            raise LLMUnavailable("no job embeddings stored")
         query_vector = embed_query(resume_text, config, client=None)
         ranked = rank_hybrid(
             resume_text, query_vector, postings, matrix, config.job_shortlist_size

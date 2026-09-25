@@ -5,6 +5,7 @@ Job ingestion: fetch postings, store them, embed the new ones.
     python -m resumescreener.jobs.ingest --no-embed      # fetch only, no API calls
     python -m resumescreener.jobs.ingest --stats         # what is in the store
     python -m resumescreener.jobs.ingest --embed-only    # embed whatever is missing
+    python -m resumescreener.jobs.ingest --company "Hugging Face"   # one company, any ATS
 
 Runs offline, never on the request path. In Kubernetes this is a CronJob; locally
 it is a command you run when you want fresh postings.
@@ -29,6 +30,7 @@ from ..config import load_config
 from ..llm import LLMUnavailable
 from ..logging_config import configure_logging
 from .embeddings import embed_documents
+from .lookup import lookup_company
 from .sources import build_sources
 from .store import JobStore
 
@@ -37,14 +39,14 @@ logger = logging.getLogger(__name__)
 COMPANIES_FILE = Path(__file__).parent / "companies.json"
 
 
-def load_companies() -> tuple[list[str], list[str]]:
+def load_companies() -> dict[str, list[str]]:
+    """ATS name -> company slugs, from companies.json. Keys starting '_' are notes."""
     data = json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))
-    return data.get("greenhouse", []), data.get("lever", [])
+    return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, list)}
 
 
-def fetch_and_store(store: JobStore, use_remotive: bool = True) -> tuple[int, int]:
-    greenhouse, lever = load_companies()
-    sources = build_sources(greenhouse, lever, use_remotive=use_remotive)
+def fetch_and_store(store: JobStore, use_aggregators: bool = True) -> tuple[int, int]:
+    sources = build_sources(load_companies(), use_aggregators=use_aggregators)
 
     all_postings = []
     for source in sources:
@@ -80,7 +82,11 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch and embed job postings.")
     parser.add_argument("--no-embed", action="store_true", help="fetch only, no API calls")
     parser.add_argument("--embed-only", action="store_true", help="skip fetching")
-    parser.add_argument("--no-remotive", action="store_true", help="company boards only")
+    parser.add_argument("--no-aggregators", "--no-remotive", dest="no_aggregators",
+                        action="store_true",
+                        help="company boards only; skip Remotive and Arbeitnow")
+    parser.add_argument("--company", metavar="NAME",
+                        help="fetch one company by name or careers URL from any supported ATS")
     parser.add_argument("--limit", type=int, default=200, metavar="N",
                         help="how many postings to embed this run (default 200)")
     parser.add_argument("--stats", action="store_true", help="show store contents and exit")
@@ -104,9 +110,15 @@ def main():
         removed = store.delete_older_than(args.prune_days)
         print(f"pruned {removed} stale postings")
 
-    if not args.embed_only:
+    if args.company:
+        result = lookup_company(args.company, store, refresh=True)
+        if not result.found:
+            print(f"\nNo open roles found for {args.company!r} on any supported board.")
+        for board in result.boards:
+            print(f"  {board.ats:16} {board.slug:24} {board.jobs:>5} postings")
+    elif not args.embed_only:
         print("\nFetching job boards...")
-        inserted, updated = fetch_and_store(store, use_remotive=not args.no_remotive)
+        inserted, updated = fetch_and_store(store, use_aggregators=not args.no_aggregators)
         print(f"  stored: {inserted} new, {updated} updated")
 
     if not args.no_embed:

@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Make the package importable when CI runs a bare `pytest` (not `python -m pytest`).
+pythonpath = ["."]
 addopts = "-q"
 
 [tool.ruff]
