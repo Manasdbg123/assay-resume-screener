@@ -96,3 +96,19 @@ def test_no_orphaned_result_containers():
     containers = set(re.findall(r'id="([a-z-]*(?:details|list|skills))"', HTML))
     orphans = {cid for cid in containers if f"'{cid}'" not in JS}
     assert not orphans, f"markup with no renderer in main.js: {sorted(orphans)}"
+
+
+def test_job_board_links_are_only_followed_when_http():
+    """
+    Posting URLs come from third-party job boards. A `javascript:` URL assigned
+    to an href would run in this page, so every link goes through an http(s) check.
+    """
+    assert "link.href = job.url" in JS
+    assert "/^https?:\\/\\//i.test(job.url" in JS
+    assert "apply.href = url" in JS and "const url = safeUrl(job.url)" in JS
+
+
+def test_every_mode_tab_has_a_handler():
+    modes = set(re.findall(r'data-mode="([a-z]+)"', HTML))
+    assert modes == {"check", "discover", "browse"}
+    assert "if (next === 'browse')" in JS

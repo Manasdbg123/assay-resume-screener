@@ -48,7 +48,23 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_source    ON jobs(source);
 CREATE INDEX IF NOT EXISTS idx_jobs_posted_at ON jobs(posted_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_embedded  ON jobs(embedding_dim);
+CREATE INDEX IF NOT EXISTS idx_jobs_company   ON jobs(company COLLATE NOCASE);
+
+-- Company lookups: which boards a searched name resolved to, and when. Lets a
+-- repeat search within the TTL answer from SQLite instead of probing six ATSs.
+CREATE TABLE IF NOT EXISTS company_lookups (
+    query       TEXT PRIMARY KEY,
+    company     TEXT NOT NULL,
+    boards      TEXT NOT NULL,
+    looked_up_at TEXT NOT NULL
+);
 """
+
+SORTS = {
+    "recent": "COALESCE(posted_at, fetched_at) DESC",
+    "company": "company COLLATE NOCASE ASC, title COLLATE NOCASE ASC",
+    "title": "title COLLATE NOCASE ASC",
+}
 
 
 class JobStore:
@@ -96,7 +112,7 @@ class JobStore:
                            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                         (job.id, job.source, job.title, job.company, job.location,
                          job.url, job.description,
-                         job.posted_at.isoformat() if job.posted_at else None,
+                         _utc_iso(job.posted_at),
                          int(job.remote), json.dumps(job.tags), now),
                     )
                     inserted += 1
@@ -109,7 +125,7 @@ class JobStore:
                        WHERE id=?""",
                     (job.source, job.title, job.company, job.location, job.url,
                      job.description,
-                     job.posted_at.isoformat() if job.posted_at else None,
+                     _utc_iso(job.posted_at),
                      int(job.remote), json.dumps(job.tags), now, job.id),
                 )
                 if text_changed:
@@ -132,6 +148,50 @@ class JobStore:
                     "UPDATE jobs SET embedding=?, embedding_dim=? WHERE id=?",
                     (array.tobytes(), int(array.shape[0]), job_id),
                 )
+
+    def replace_board(self, ats: str, slug: str, postings: list[JobPosting]) -> int:
+        """
+        Make the store hold exactly this board's current postings.
+
+        Upserts what is live and deletes what is not - a role that was filled
+        yesterday must not keep showing up as open. Returns how many were removed.
+        """
+        self.upsert_jobs(postings)
+        live = {p.id for p in postings}
+        prefix = f"{ats}:{slug}:"
+        with self._connect() as conn:
+            stored = [
+                row["id"] for row in conn.execute(
+                    "SELECT id FROM jobs WHERE substr(id, 1, ?) = ?", (len(prefix), prefix)
+                )
+            ]
+            stale = [job_id for job_id in stored if job_id not in live]
+            conn.executemany("DELETE FROM jobs WHERE id = ?", [(j,) for j in stale])
+        return len(stale)
+
+    def save_lookup(self, query: str, company: str, boards: list[dict]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO company_lookups (query, company, boards, looked_up_at)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(query) DO UPDATE SET company=excluded.company,
+                       boards=excluded.boards, looked_up_at=excluded.looked_up_at""",
+                (query, company, json.dumps(boards), datetime.now(UTC).isoformat()),
+            )
+
+    def recent_lookup(self, query: str, max_age_hours: float) -> dict | None:
+        """A lookup of this query made within max_age_hours, or None."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM company_lookups WHERE query = ?", (query,)
+            ).fetchone()
+        if row is None:
+            return None
+        age = datetime.now(UTC) - datetime.fromisoformat(row["looked_up_at"])
+        if age.total_seconds() > max_age_hours * 3600:
+            return None
+        return {"company": row["company"], "boards": json.loads(row["boards"]),
+                "looked_up_at": row["looked_up_at"]}
 
     def delete_older_than(self, days: int) -> int:
         """Drop stale postings. A job board entry from last year is noise."""
@@ -196,6 +256,95 @@ class JobStore:
             rows = conn.execute("SELECT * FROM jobs").fetchall()
         return [_row_to_posting(row) for row in rows]
 
+    def search(
+        self,
+        query: str = "",
+        company: str = "",
+        location: str = "",
+        remote_only: bool = False,
+        source: str = "",
+        posted_within_days: int | None = None,
+        sort: str = "recent",
+        limit: int = 30,
+        offset: int = 0,
+    ) -> tuple[list[JobPosting], int]:
+        """
+        Browse the store. Returns (page of postings, total matching).
+
+        Every word of `query` must appear somewhere in the posting; titles that
+        contain the query rank first under the default sort, since "Python" in a
+        title means more than "Python" in paragraph nine. Plain LIKE is enough at
+        tens of thousands of rows; FTS5 is the step up past that.
+        """
+        where, params = ["1=1"], []
+        for word in query.split()[:8]:
+            like = f"%{_escape_like(word)}%"
+            where.append(
+                "(title LIKE ? ESCAPE '\\' OR company LIKE ? ESCAPE '\\' "
+                "OR tags LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')"
+            )
+            params.extend([like] * 4)
+        if company:
+            where.append("company = ? COLLATE NOCASE")
+            params.append(company)
+        if location:
+            where.append("location LIKE ? ESCAPE '\\'")
+            params.append(f"%{_escape_like(location)}%")
+        if remote_only:
+            where.append("remote = 1")
+        if source:
+            where.append("source = ?")
+            params.append(source)
+        if posted_within_days:
+            where.append("COALESCE(posted_at, fetched_at) >= ?")
+            cutoff = datetime.now(UTC).timestamp() - posted_within_days * 86400
+            params.append(datetime.fromtimestamp(cutoff, UTC).isoformat())
+
+        clause = " AND ".join(where)
+        order = SORTS.get(sort, SORTS["recent"])
+        order_params: list = []
+        if query.strip() and sort == "recent":
+            order = f"(title LIKE ? ESCAPE '\\') DESC, {order}"
+            order_params.append(f"%{_escape_like(query.strip())}%")
+
+        with self._connect() as conn:
+            total = conn.execute(
+                f"SELECT COUNT(*) AS n FROM jobs WHERE {clause}", params
+            ).fetchone()["n"]
+            rows = conn.execute(
+                f"SELECT * FROM jobs WHERE {clause} ORDER BY {order} LIMIT ? OFFSET ?",
+                [*params, *order_params, limit, offset],
+            ).fetchall()
+        return [_row_to_posting(row) for row in rows], total
+
+    def board_jobs(self, ats: str, slug: str) -> list[JobPosting]:
+        prefix = f"{ats}:{slug}:"
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM jobs WHERE substr(id, 1, ?) = ? "
+                "ORDER BY COALESCE(posted_at, fetched_at) DESC",
+                (len(prefix), prefix),
+            ).fetchall()
+        return [_row_to_posting(row) for row in rows]
+
+    def get(self, job_id: str) -> JobPosting | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        return _row_to_posting(row) if row else None
+
+    def companies(self, query: str = "", limit: int = 50) -> list[dict]:
+        """Companies in the store with their open-role counts, largest first."""
+        sql = "SELECT company, COUNT(*) AS n FROM jobs"
+        params: list = []
+        if query:
+            sql += " WHERE company LIKE ? ESCAPE '\\'"
+            params.append(f"%{_escape_like(query)}%")
+        sql += " GROUP BY company COLLATE NOCASE ORDER BY n DESC, company LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            return [{"company": r["company"], "jobs": r["n"]}
+                    for r in conn.execute(sql, params)]
+
     def stats(self) -> dict:
         with self._connect() as conn:
             by_source = {
@@ -203,11 +352,31 @@ class JobStore:
                     "SELECT source, COUNT(*) AS n FROM jobs GROUP BY source"
                 )
             }
+            companies = conn.execute(
+                "SELECT COUNT(DISTINCT company) AS n FROM jobs"
+            ).fetchone()["n"]
+            remote = conn.execute("SELECT COUNT(*) AS n FROM jobs WHERE remote = 1").fetchone()["n"]
         return {
             "total": self.count(),
             "embedded": self.count(embedded_only=True),
+            "companies": companies,
+            "remote": remote,
             "by_source": by_source,
         }
+
+
+def _utc_iso(value: datetime | None) -> str | None:
+    """Store every timestamp in UTC so string comparison orders them correctly."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat()
+
+
+def _escape_like(text: str) -> str:
+    """Make %, _ and the escape char literal inside a LIKE pattern."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _row_to_posting(row: sqlite3.Row) -> JobPosting:

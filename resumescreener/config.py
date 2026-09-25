@@ -75,6 +75,11 @@ class Config:
     # Concurrent LLM calls in stage 3. Too high trips provider rate limits, which
     # on a free tier means every call fails instead of just being slow.
     job_llm_concurrency: int = field(default_factory=lambda: _int("JOB_LLM_CONCURRENCY", 5))
+    # A company looked up in the Browse tab is re-fetched from its board after
+    # this long; within it, repeat searches answer from SQLite.
+    job_lookup_cache_hours: int = field(
+        default_factory=lambda: _int("JOB_LOOKUP_CACHE_HOURS", 6)
+    )
 
     # --- Claude ---
     anthropic_api_key: str = field(

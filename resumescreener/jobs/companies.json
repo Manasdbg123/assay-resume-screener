@@ -1,37 +1,32 @@
 {
-  "_comment": "Company boards to ingest. Greenhouse and Lever expose these publicly with no API key. The token is the company's slug in its board URL - e.g. boards.greenhouse.io/stripe -> 'stripe'. Add or remove freely; a dead token is logged and skipped, it does not fail the run.",
+  "_comment": "Company boards ingested in bulk. Every one of these applicant-tracking systems exposes a public, keyless feed per company, addressed by the slug in the company's board URL - e.g. boards.greenhouse.io/stripe -> 'stripe', jobs.ashbyhq.com/openai -> 'openai'. Add or remove freely; a dead slug is logged and skipped, it does not fail the run. Companies not listed here can still be found on demand from the Browse tab, which probes all six systems by name.",
 
   "greenhouse": [
-    "stripe",
-    "databricks",
-    "figma",
-    "airtable",
-    "gitlab",
-    "reddit",
-    "discord",
-    "robinhood",
-    "instacart",
-    "doordash",
-    "flexport",
-    "asana",
-    "benchling",
-    "cloudflare",
-    "twilio",
-    "dropbox",
-    "grammarly",
-    "samsara",
-    "affirm",
-    "brex"
+    "stripe", "databricks", "figma", "airtable", "gitlab", "reddit", "discord",
+    "robinhood", "instacart", "doordash", "flexport", "asana", "benchling",
+    "cloudflare", "twilio", "dropbox", "grammarly", "samsara", "affirm", "brex",
+    "anthropic", "coinbase", "airbnb", "lyft", "pinterest", "datadog", "mongodb",
+    "elastic", "okta", "gusto", "duolingo", "squarespace", "webflow", "postman",
+    "chime", "carta", "scaleai", "vercel", "twitch", "roblox", "nextdoor"
   ],
 
   "lever": [
-    "netflix",
-    "spotify",
-    "plaid",
-    "ramp",
-    "mistral",
-    "leadiq",
-    "voleon",
-    "attentive"
-  ]
+    "netflix", "spotify", "plaid", "mistral", "leadiq", "voleon", "attentive",
+    "palantir", "eventbrite", "whoop"
+  ],
+
+  "ashby": [
+    "openai", "notion", "linear", "ramp", "supabase", "posthog", "vanta", "deel",
+    "replit", "cohere", "perplexity", "retool", "zapier"
+  ],
+
+  "workable": [
+    "huggingface"
+  ],
+
+  "smartrecruiters": [
+    "Visa", "BoschGroup"
+  ],
+
+  "recruitee": []
 }

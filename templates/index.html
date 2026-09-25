@@ -3,165 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AI-powered resume screener that matches your CV against job descriptions and provides intelligent scoring with actionable feedback.">
-    <title>ResumeAI — Smart Resume Screener</title>
-    <!-- Inline SVG Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='4' width='20' height='26' rx='3' fill='none' stroke='%23818cf8' stroke-width='2.5'/%3E%3Ccircle cx='24' cy='10' r='7' fill='%2334d399'/%3E%3Cpath d='M22 10L23.5 11.5L27 8' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <meta name="description" content="Score your CV against any job with evidence behind every judgement, find your best matches, and browse every open role at any company.">
+    <meta name="color-scheme" content="light dark">
+    <title>ResumeAI — Resume Screener</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M10 9h8l4 4v10a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M12.5 17.5l2 2 4-4.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>
+        // Apply a saved theme before first paint so the page never flashes.
+        try {
+            const saved = localStorage.getItem('theme');
+            if (saved) document.documentElement.dataset.theme = saved;
+        } catch (e) { /* storage blocked - follow the system theme */ }
+    </script>
 </head>
 <body>
-    <!-- Top Progress Bar -->
     <div class="progress-bar" id="progress-bar"></div>
 
-    <!-- Animated background -->
-    <div class="bg-gradient"></div>
-    <div class="bg-noise"></div>
-    <div class="bg-orbs">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-        <div class="orb orb-3"></div>
-    </div>
-
-    <!-- Header -->
     <header class="header">
-        <div class="container">
-            <div class="logo">
-                <div class="logo-icon">
-                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-                        <rect x="2" y="4" width="20" height="26" rx="3" stroke="url(#logoGrad)" stroke-width="2.5"/>
-                        <line x1="7" y1="11" x2="17" y2="11" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
-                        <line x1="7" y1="16" x2="17" y2="16" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
-                        <line x1="7" y1="21" x2="13" y2="21" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
-                        <circle cx="24" cy="10" r="7" fill="url(#logoGrad2)" opacity="0.9"/>
-                        <path d="M22 10L23.5 11.5L27 8" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        <defs>
-                            <linearGradient id="logoGrad" x1="0" y1="0" x2="24" y2="32">
-                                <stop stop-color="#818cf8"/>
-                                <stop offset="1" stop-color="#c084fc"/>
-                            </linearGradient>
-                            <linearGradient id="logoGrad2" x1="17" y1="3" x2="31" y2="17">
-                                <stop stop-color="#34d399"/>
-                                <stop offset="1" stop-color="#22d3ee"/>
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                </div>
+        <div class="container header-inner">
+            <a class="logo" href="/" aria-label="ResumeAI home">
+                <span class="logo-mark" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M9 14l2 2 4-4"/></svg>
+                </span>
                 <span class="logo-text">Resume<span class="logo-accent">AI</span></span>
-            </div>
-            <p class="tagline">AI-Powered Resume Screening & Matching</p>
+            </a>
+
+            <nav class="mode-tabs" role="tablist" aria-label="What would you like to do?">
+                <button type="button" class="mode-tab active" id="mode-check" role="tab" aria-selected="true" data-mode="check">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <span class="mode-tab-title">Check a job</span>
+                </button>
+                <button type="button" class="mode-tab" id="mode-discover" role="tab" aria-selected="false" data-mode="discover">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>
+                    <span class="mode-tab-title">Find matches</span>
+                </button>
+                <button type="button" class="mode-tab" id="mode-browse" role="tab" aria-selected="false" data-mode="browse">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                    <span class="mode-tab-title">Browse jobs</span>
+                </button>
+            </nav>
+
+            <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            </button>
         </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="container">
-        <!-- Upload Section -->
+    <main class="container main">
+        <!-- ============ Check / Discover ============ -->
         <section class="upload-section" id="upload-section">
-            <div class="section-header">
-                <h1>Match Your Resume to Any Job</h1>
-                <p>Upload your CV and paste a job description to get an instant AI-powered compatibility score with actionable feedback.</p>
-            </div>
-
-            <div class="mode-tabs" role="tablist" aria-label="What would you like to do?">
-                <button type="button" class="mode-tab active" id="mode-check"
-                        role="tab" aria-selected="true" data-mode="check">
-                    <span class="mode-tab-title">Check against a job</span>
-                    <span class="mode-tab-sub">Paste a job description, get a scored breakdown</span>
-                </button>
-                <button type="button" class="mode-tab" id="mode-discover"
-                        role="tab" aria-selected="false" data-mode="discover">
-                    <span class="mode-tab-title">Find matching jobs</span>
-                    <span class="mode-tab-sub">Search live postings for the best fits</span>
-                </button>
+            <div class="hero">
+                <span class="eyebrow" id="hero-eyebrow">Evidence-based screening</span>
+                <h1 id="hero-title">See how your CV really reads against a job</h1>
+                <p id="hero-sub">Every score comes with a quote from your resume behind it, so you know exactly what to fix before you apply.</p>
             </div>
 
             <form id="analyze-form" class="analyze-form">
                 <div class="form-grid">
-                    <!-- Resume Upload -->
                     <div class="form-card" id="resume-card">
                         <div class="card-header">
-                            <div class="card-icon upload-icon">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                    <polyline points="17 8 12 3 7 8"/>
-                                    <line x1="12" y1="3" x2="12" y2="15"/>
-                                </svg>
-                            </div>
-                            <h2>Upload Resume</h2>
+                            <span class="step-dot">1</span>
+                            <h2>Your resume</h2>
                         </div>
                         <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Upload resume file. Drag and drop or click to browse. Supports PDF, DOCX, and TXT files.">
-                            <div class="drop-zone-content">
-                                <div class="drop-icon">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                        <polyline points="14 2 14 8 20 8"/>
-                                        <line x1="12" y1="18" x2="12" y2="12"/>
-                                        <polyline points="9 15 12 12 15 15"/>
-                                    </svg>
-                                </div>
-                                <p class="drop-text">Drag & drop your resume here</p>
-                                <p class="drop-subtext">or click to browse</p>
-                                <div class="file-types">
-                                    <span class="badge">PDF</span>
-                                    <span class="badge">DOCX</span>
-                                    <span class="badge">TXT</span>
-                                </div>
+                            <div class="drop-icon" aria-hidden="true">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                            <p class="drop-text"><strong>Click to upload</strong> or drag and drop</p>
+                            <div class="file-types">
+                                <span class="badge">PDF</span>
+                                <span class="badge">DOCX</span>
+                                <span class="badge">TXT</span>
+                                <span class="badge-note">up to 16 MB</span>
                             </div>
                             <input type="file" id="resume-input" name="resume" accept=".pdf,.docx,.txt" hidden>
                         </div>
                         <div class="file-info" id="file-info" style="display: none;">
-                            <div class="file-icon">📄</div>
+                            <div class="file-icon" aria-hidden="true">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            </div>
                             <div class="file-details">
                                 <span class="file-name" id="file-name"></span>
                                 <span class="file-size" id="file-size"></span>
                             </div>
-                            <button type="button" class="file-remove" id="file-remove" title="Remove file" aria-label="Remove selected file">✕</button>
+                            <button type="button" class="icon-btn file-remove" id="file-remove" title="Remove file" aria-label="Remove selected file">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Job Description -->
                     <div class="form-card" id="jd-card">
                         <div class="card-header">
-                            <div class="card-icon jd-icon">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <rect x="2" y="3" width="20" height="18" rx="2"/>
-                                    <line x1="8" y1="7" x2="16" y2="7"/>
-                                    <line x1="8" y1="11" x2="16" y2="11"/>
-                                    <line x1="8" y1="15" x2="12" y2="15"/>
-                                </svg>
-                            </div>
-                            <h2>Job Description</h2>
+                            <span class="step-dot">2</span>
+                            <h2>Job description</h2>
+                            <span class="char-count"><span id="char-count">0</span> chars</span>
                         </div>
                         <textarea
                             id="job-description"
                             name="job_description"
                             class="jd-textarea"
-                            placeholder="Paste the full job description here...&#10;&#10;Example:&#10;We are looking for a Senior Python Developer with 5+ years of experience in Django, REST APIs, PostgreSQL, and AWS. Strong knowledge of CI/CD, Docker, and microservices architecture required..."
-                            rows="12"
+                            placeholder="Paste the full job description here — or pick any role from Browse jobs and send it here in one click."
+                            rows="11"
                             aria-label="Job description text"
                         ></textarea>
-                        <div class="char-count">
-                            <span id="char-count">0</span> characters
-                        </div>
+                        <p class="jd-source" id="jd-source" style="display: none;"></p>
                     </div>
+
                     <div class="form-card" id="discover-card" style="display: none;">
                         <div class="card-header">
-                            <div class="card-icon jd-icon">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <circle cx="11" cy="11" r="8"/>
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                                </svg>
-                            </div>
-                            <h2>Find Matching Jobs</h2>
+                            <span class="step-dot">2</span>
+                            <h2>Search preferences</h2>
                         </div>
                         <p class="discover-blurb">
-                            We search live postings from company job boards, rank them
-                            against your CV, and score the strongest matches in detail.
+                            We rank every indexed posting against your CV, then score the
+                            strongest matches in detail with quoted evidence.
                         </p>
-                        <label class="discover-option">
+                        <label class="switch-row">
                             <input type="checkbox" id="remote-only" name="remote_only">
+                            <span class="switch" aria-hidden="true"></span>
                             <span>Remote roles only</span>
                         </label>
                         <p class="discover-note" id="job-index-note">Checking the job index...</p>
@@ -169,264 +132,274 @@
                 </div>
 
                 <button type="submit" class="analyze-btn" id="analyze-btn">
-                    <span class="btn-text">Analyze Resume</span>
+                    <span class="btn-text">Analyze resume</span>
                     <span class="btn-loader" style="display: none;">
                         <span class="spinner"></span>
-                        Analyzing...
+                        <span id="loader-text">Analyzing…</span>
                     </span>
-                    <svg class="btn-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                        <polyline points="12 5 19 12 12 19"/>
-                    </svg>
+                    <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                 </button>
             </form>
 
-            <!-- How It Works -->
             <div class="how-it-works">
-                <h2 class="how-title">How It Works</h2>
-                <div class="steps-grid">
-                    <div class="step-card">
-                        <div class="step-number">1</div>
-                        <div class="step-icon">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="17 8 12 3 7 8"/>
-                                <line x1="12" y1="3" x2="12" y2="15"/>
-                            </svg>
-                        </div>
-                        <h3>Upload Resume</h3>
-                        <p>Drop your CV in PDF, DOCX, or TXT format</p>
+                <div class="step-card">
+                    <div class="step-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                     </div>
-                    <div class="step-card">
-                        <div class="step-number">2</div>
-                        <div class="step-icon">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <rect x="2" y="3" width="20" height="18" rx="2"/>
-                                <line x1="8" y1="7" x2="16" y2="7"/>
-                                <line x1="8" y1="11" x2="16" y2="11"/>
-                                <line x1="8" y1="15" x2="12" y2="15"/>
-                            </svg>
-                        </div>
-                        <h3>Add Job Description</h3>
-                        <p>Paste the target job posting you want to match</p>
+                    <h3>Evidence, not keywords</h3>
+                    <p>Each requirement is marked as mentioned, applied, or expert, with the line from your CV that proves it.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </div>
-                    <div class="step-card">
-                        <div class="step-number">3</div>
-                        <div class="step-icon">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                <polyline points="22 4 12 14.01 9 11.01"/>
-                            </svg>
-                        </div>
-                        <h3>Get AI Analysis</h3>
-                        <p>Receive detailed scoring and improvement tips</p>
+                    <h3>Any company, live</h3>
+                    <p>Browse every open role at any company on Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Recruitee.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
                     </div>
+                    <h3>Measured, not claimed</h3>
+                    <p>The AI engine is benchmarked against a keyword baseline on human-labelled data in this repo.</p>
                 </div>
             </div>
         </section>
 
-        <!-- Error Message -->
+        <!-- ============ Browse jobs ============ -->
+        <section class="browse-section" id="browse-section" style="display: none;">
+            <div class="hero hero-compact">
+                <span class="eyebrow">Live openings</span>
+                <h1>Every open role, at any company</h1>
+                <p>Search the index, or type any company name to pull its current openings straight from its job board.</p>
+            </div>
+
+            <form class="lookup-card" id="lookup-form" autocomplete="off">
+                <div class="lookup-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>
+                </div>
+                <div class="lookup-field">
+                    <label for="lookup-input">Find a company</label>
+                    <input type="text" id="lookup-input" placeholder="e.g. Stripe, Hugging Face, or a careers-page URL" maxlength="200">
+                </div>
+                <button type="submit" class="btn btn-primary" id="lookup-btn">
+                    <span class="btn-label">Get open roles</span>
+                    <span class="spinner spinner-sm" style="display: none;"></span>
+                </button>
+            </form>
+            <div class="lookup-result" id="lookup-result" style="display: none;" role="status"></div>
+
+            <div class="browse-stats" id="browse-stats" aria-live="polite"></div>
+
+            <div class="browse-layout">
+                <aside class="company-panel" aria-label="Companies">
+                    <div class="panel-head">
+                        <h2>Companies</h2>
+                        <span class="panel-count" id="company-count"></span>
+                    </div>
+                    <input type="search" class="input input-sm" id="company-filter" placeholder="Filter companies" aria-label="Filter companies">
+                    <ul class="company-list" id="company-list"></ul>
+                </aside>
+
+                <div class="browse-main">
+                    <div class="toolbar">
+                        <div class="search-field">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="search" id="browse-query" placeholder="Title, skill or keyword" aria-label="Search jobs">
+                        </div>
+                        <div class="search-field">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            <input type="search" id="browse-location" placeholder="Location" aria-label="Location">
+                        </div>
+                        <select class="select" id="browse-days" aria-label="Posted within">
+                            <option value="">Any time</option>
+                            <option value="1">Past 24 hours</option>
+                            <option value="7">Past week</option>
+                            <option value="30">Past month</option>
+                        </select>
+                        <select class="select" id="browse-source" aria-label="Job board">
+                            <option value="">All boards</option>
+                        </select>
+                        <select class="select" id="browse-sort" aria-label="Sort by">
+                            <option value="recent">Most recent</option>
+                            <option value="company">Company A–Z</option>
+                            <option value="title">Title A–Z</option>
+                        </select>
+                        <label class="chip-toggle">
+                            <input type="checkbox" id="browse-remote">
+                            <span>Remote</span>
+                        </label>
+                    </div>
+
+                    <div class="active-filters" id="active-filters"></div>
+                    <p class="results-count" id="browse-count"></p>
+                    <div class="browse-list" id="browse-list"></div>
+                    <button type="button" class="btn btn-secondary load-more" id="browse-more" style="display: none;">Load more</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ Error toast ============ -->
         <div class="error-toast" id="error-toast" style="display: none;" role="alert">
-            <div class="error-icon">⚠️</div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span id="error-message"></span>
-            <button class="error-close" id="error-close" aria-label="Dismiss error">✕</button>
+            <button class="icon-btn error-close" id="error-close" aria-label="Dismiss error">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
         </div>
 
-        <!-- Results Section -->
+        <!-- ============ Single-job results ============ -->
         <section class="results-section" id="results-section" style="display: none;">
             <div class="results-header">
-                <h2>Analysis Results</h2>
+                <button class="btn btn-ghost back-btn" id="analyze-another-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                    Analyze another
+                </button>
                 <p class="results-filename" id="results-filename"></p>
             </div>
 
-            <!-- Overall Score Ring -->
-            <div class="score-hero">
-                <div class="score-ring-container">
-                    <div class="score-glow"></div>
-                    <svg class="score-ring" width="220" height="220" viewBox="0 0 220 220" aria-hidden="true">
-                        <circle class="score-ring-bg" cx="110" cy="110" r="95" fill="none" stroke-width="12"/>
-                        <circle class="score-ring-fill" id="score-ring-fill" cx="110" cy="110" r="95"
-                                fill="none" stroke-width="12" stroke-linecap="round"
-                                stroke-dasharray="597" stroke-dashoffset="597"
-                                transform="rotate(-90 110 110)"/>
-                    </svg>
-                    <div class="score-value">
-                        <span class="score-number" id="overall-score" aria-label="Overall match score">0</span>
-                        <span class="score-percent">%</span>
-                    </div>
-                </div>
-                <div class="score-label" id="score-label">Calculating...</div>
-            </div>
-
-            <!-- Verdict, provenance, and the model's written summary -->
-            <div class="verdict-card" id="verdict-card">
-                <div class="verdict-row">
-                    <span class="verdict-badge" id="verdict-badge"></span>
-                    <span class="engine-badge" id="engine-badge" title="Which engine produced this result"></span>
-                </div>
-                <p class="verdict-summary" id="verdict-summary"></p>
-                <div class="degraded-notice" id="degraded-notice" style="display: none;">
-                    <strong>Degraded result.</strong> The AI engine was unavailable, so this
-                    score comes from keyword matching only. It cannot tell a skill that is
-                    listed from a skill that was used.
-                </div>
-            </div>
-
-            <!-- Score Cards -->
-            <div class="score-cards">
-                <div class="score-card" data-category="skills">
-                    <div class="score-card-header">
-                        <div class="score-card-icon skills-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <div class="overview">
+                <div class="score-hero">
+                    <div class="score-ring-container">
+                        <svg class="score-ring" width="200" height="200" viewBox="0 0 220 220" aria-hidden="true">
+                            <circle class="score-ring-bg" cx="110" cy="110" r="95" fill="none" stroke-width="14"/>
+                            <circle class="score-ring-fill" id="score-ring-fill" cx="110" cy="110" r="95"
+                                    fill="none" stroke-width="14" stroke-linecap="round"
+                                    stroke-dasharray="597" stroke-dashoffset="597"
+                                    transform="rotate(-90 110 110)"/>
+                        </svg>
+                        <div class="score-value">
+                            <span class="score-number" id="overall-score" aria-label="Overall match score">0</span>
+                            <span class="score-caption">out of 100</span>
                         </div>
-                        <span>Skills Match</span>
                     </div>
-                    <div class="score-card-bar">
-                        <div class="score-bar-fill" id="skills-bar" style="width: 0%"></div>
-                    </div>
-                    <div class="score-card-value" id="skills-score">0%</div>
+                    <div class="score-label" id="score-label">Calculating...</div>
                 </div>
 
-                <div class="score-card" data-category="domain">
-                    <div class="score-card-header">
-                        <div class="score-card-icon keywords-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        </div>
-                        <span>Domain Relevance</span>
+                <div class="verdict-card" id="verdict-card">
+                    <div class="verdict-row">
+                        <span class="verdict-badge" id="verdict-badge"></span>
+                        <span class="engine-badge" id="engine-badge" title="Which engine produced this result"></span>
                     </div>
-                    <div class="score-card-bar">
-                        <div class="score-bar-fill" id="domain-bar" style="width: 0%"></div>
+                    <p class="verdict-summary" id="verdict-summary"></p>
+                    <div class="degraded-notice" id="degraded-notice" style="display: none;">
+                        <strong>Degraded result.</strong> The AI engine was unavailable, so this
+                        score comes from keyword matching only. It cannot tell a skill that is
+                        listed from a skill that was used.
                     </div>
-                    <div class="score-card-value" id="domain-score">0%</div>
-                </div>
 
-                <div class="score-card" data-category="experience">
-                    <div class="score-card-header">
-                        <div class="score-card-icon experience-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                    <div class="score-cards">
+                        <div class="score-card" data-category="skills">
+                            <div class="score-card-header"><span>Skills</span><span class="score-card-value" id="skills-score">0%</span></div>
+                            <div class="score-card-bar"><div class="score-bar-fill" id="skills-bar" style="width: 0%"></div></div>
                         </div>
-                        <span>Experience</span>
-                    </div>
-                    <div class="score-card-bar">
-                        <div class="score-bar-fill" id="experience-bar" style="width: 0%"></div>
-                    </div>
-                    <div class="score-card-value" id="experience-score">0%</div>
-                </div>
-
-                <div class="score-card" data-category="education">
-                    <div class="score-card-header">
-                        <div class="score-card-icon education-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1 2 3 6 3s6-2 6-3v-5"/></svg>
+                        <div class="score-card" data-category="experience">
+                            <div class="score-card-header"><span>Experience</span><span class="score-card-value" id="experience-score">0%</span></div>
+                            <div class="score-card-bar"><div class="score-bar-fill" id="experience-bar" style="width: 0%"></div></div>
                         </div>
-                        <span>Education</span>
+                        <div class="score-card" data-category="domain">
+                            <div class="score-card-header"><span>Domain relevance</span><span class="score-card-value" id="domain-score">0%</span></div>
+                            <div class="score-card-bar"><div class="score-bar-fill" id="domain-bar" style="width: 0%"></div></div>
+                        </div>
+                        <div class="score-card" data-category="education">
+                            <div class="score-card-header"><span>Education</span><span class="score-card-value" id="education-score">0%</span></div>
+                            <div class="score-card-bar"><div class="score-bar-fill" id="education-bar" style="width: 0%"></div></div>
+                        </div>
                     </div>
-                    <div class="score-card-bar">
-                        <div class="score-bar-fill" id="education-bar" style="width: 0%"></div>
-                    </div>
-                    <div class="score-card-value" id="education-score">0%</div>
+                    <p class="hint">Hover a bar to see the reasoning behind it.</p>
                 </div>
             </div>
 
-            <!-- Skills Breakdown -->
             <div class="details-grid">
-                <!-- Matched Skills -->
                 <div class="detail-card matched-card">
                     <div class="detail-header">
-                        <h3>✅ Matched Skills</h3>
+                        <h3><span class="dot dot-good"></span>Matched skills</h3>
                         <span class="detail-count" id="matched-count">0</span>
                     </div>
-                    <div class="skills-tags" id="matched-skills">
-                        <!-- Populated by JS -->
-                    </div>
+                    <div class="skills-tags" id="matched-skills"></div>
                 </div>
-
-                <!-- Missing Skills -->
                 <div class="detail-card missing-card">
                     <div class="detail-header">
-                        <h3>❌ Missing Skills</h3>
+                        <h3><span class="dot dot-bad"></span>Missing skills</h3>
                         <span class="detail-count" id="missing-count">0</span>
                     </div>
-                    <div class="skills-tags" id="missing-skills">
-                        <!-- Populated by JS -->
-                    </div>
+                    <div class="skills-tags" id="missing-skills"></div>
                 </div>
-
-                <!-- Extra Skills -->
                 <div class="detail-card extra-card">
                     <div class="detail-header">
-                        <h3>➕ Transferable Skills</h3>
+                        <h3><span class="dot dot-info"></span>Transferable skills</h3>
                         <span class="detail-count" id="transferable-count">0</span>
                     </div>
-                    <div class="skills-tags" id="transferable-skills">
-                        <!-- Populated by JS -->
-                    </div>
+                    <div class="skills-tags" id="transferable-skills"></div>
                 </div>
             </div>
 
-            <!-- Per-skill evidence: the claim, and the line that supports it -->
             <div class="category-card">
-                <h3>🔍 Evidence by Requirement</h3>
-                <div class="evidence-list" id="evidence-list">
-                    <!-- Populated by JS -->
-                </div>
+                <h3>Evidence by requirement</h3>
+                <div class="evidence-list" id="evidence-list"></div>
             </div>
 
-            <!-- Red flags -->
             <div class="category-card flags-card" id="flags-card" style="display: none;">
-                <h3>⚠️ Worth a Closer Look</h3>
-                <div class="flags-list" id="flags-list">
-                    <!-- Populated by JS -->
-                </div>
+                <h3>Worth a closer look</h3>
+                <div class="flags-list" id="flags-list"></div>
             </div>
 
-            <!-- Suggestions -->
-            <div class="suggestions-card">
-                <h3>💡 Suggestions to Improve Your Match</h3>
-                <div class="suggestions-list" id="suggestions-list">
-                    <!-- Populated by JS -->
-                </div>
+            <div class="category-card suggestions-card">
+                <h3>How to improve your match</h3>
+                <div class="suggestions-list" id="suggestions-list"></div>
             </div>
-
-            <!-- Analyze Another -->
-            <button class="analyze-another-btn" id="analyze-another-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <polyline points="1 4 1 10 7 10"/>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-                </svg>
-                Analyze Another Resume
-            </button>
         </section>
 
-        <!-- Job match results (discover mode) -->
+        <!-- ============ Discover results ============ -->
         <section class="results-section" id="jobs-section" style="display: none;">
             <div class="results-header">
-                <h2>Your Best Matches</h2>
+                <button class="btn btn-ghost back-btn" id="jobs-another-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                    Search again
+                </button>
                 <p class="results-filename" id="jobs-filename"></p>
             </div>
-
-            <div class="jobs-summary" id="jobs-summary"></div>
-
+            <h2 class="section-title">Your best matches</h2>
+            <p class="jobs-summary" id="jobs-summary"></p>
             <div class="degraded-notice" id="jobs-degraded" style="display: none;">
                 <strong>Partial results.</strong>
                 <span id="jobs-degraded-detail"></span>
             </div>
-
             <div class="jobs-list" id="jobs-list"></div>
-
-            <button class="analyze-another-btn" id="jobs-another-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <polyline points="1 4 1 10 7 10"/>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-                </svg>
-                Search Again
-            </button>
         </section>
     </main>
 
-    <!-- Footer -->
+    <!-- ============ Job detail drawer ============ -->
+    <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+    <aside class="drawer" id="job-drawer" aria-hidden="true" aria-labelledby="drawer-title" role="dialog">
+        <div class="drawer-head">
+            <div class="drawer-company">
+                <span class="avatar" id="drawer-avatar"></span>
+                <span id="drawer-company"></span>
+            </div>
+            <button type="button" class="icon-btn" id="drawer-close" aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <h2 class="drawer-title" id="drawer-title"></h2>
+        <div class="drawer-meta" id="drawer-meta"></div>
+        <div class="drawer-actions">
+            <button type="button" class="btn btn-primary" id="drawer-check">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                Score my CV for this role
+            </button>
+            <a class="btn btn-secondary" id="drawer-apply" target="_blank" rel="noopener noreferrer">
+                Apply on company site
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+        </div>
+        <div class="drawer-body" id="drawer-body"></div>
+    </aside>
+
     <footer class="footer">
-        <div class="container">
-            <p>Built with Flask &nbsp;·&nbsp; ResumeAI v2.0</p>
+        <div class="container footer-inner">
+            <span>ResumeAI · evidence-based resume screening</span>
+            <span class="footer-muted">Job data from public company job boards. No scraping.</span>
         </div>
     </footer>
 

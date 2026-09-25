@@ -77,6 +77,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Mode switching ---
+    //
+    // 'check' and 'discover' share the upload form; 'browse' needs no CV at all.
+    const browseSection = document.getElementById('browse-section');
+    const heroCopy = {
+        check: ['Evidence-based screening',
+                'See how your CV really reads against a job',
+                'Every score comes with a quote from your resume behind it, so you know exactly what to fix before you apply.'],
+        discover: ['Job discovery',
+                   'Upload your CV. Get your best-fit roles.',
+                   'We rank thousands of live postings against your experience and explain the strongest matches in detail.'],
+    };
+
+    function showOnly(section) {
+        [uploadSection, resultsSection, jobsSection, browseSection].forEach((el) => {
+            el.style.display = el === section ? 'block' : 'none';
+        });
+    }
+
     function setMode(next) {
         mode = next;
         modeTabs.forEach((tab) => {
@@ -84,13 +102,36 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.classList.toggle('active', active);
             tab.setAttribute('aria-selected', String(active));
         });
+        hideError();
+        if (next === 'browse') {
+            showOnly(browseSection);
+            ensureBrowseLoaded();
+            return;
+        }
+        showOnly(uploadSection);
+        const [eyebrow, title, sub] = heroCopy[next];
+        document.getElementById('hero-eyebrow').textContent = eyebrow;
+        document.getElementById('hero-title').textContent = title;
+        document.getElementById('hero-sub').textContent = sub;
         jdCard.style.display = next === 'check' ? '' : 'none';
         discoverCard.style.display = next === 'discover' ? '' : 'none';
-        btnText.textContent = next === 'check' ? 'Analyze Resume' : 'Find Matching Jobs';
+        btnText.textContent = next === 'check' ? 'Analyze resume' : 'Find matching jobs';
+        document.getElementById('loader-text').textContent =
+            next === 'check' ? 'Analyzing… this takes about 15 seconds' : 'Ranking postings…';
         if (next === 'discover') loadJobIndexStatus();
     }
 
     modeTabs.forEach((tab) => tab.addEventListener('click', () => setMode(tab.dataset.mode)));
+
+    // --- Theme ---
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+        const root = document.documentElement;
+        const current = root.dataset.theme
+            || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        const next = current === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try { localStorage.setItem('theme', next); } catch (err) { /* storage blocked */ }
+    });
 
     async function loadJobIndexStatus() {
         // Tell the user up front whether anything is indexed - an empty index is
@@ -203,7 +244,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Character Count ---
     jobDescription.addEventListener('input', () => {
         charCount.textContent = jobDescription.value.length;
+        jdSource.style.display = 'none';
     });
+    const jdSource = document.getElementById('jd-source');
 
     // --- Error Handling ---
     errorClose.addEventListener('click', () => {
@@ -489,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const title = document.createElement('h3');
         title.className = 'job-title';
-        if (job.url) {
+        if (/^https?:\/\//i.test(job.url || '')) {
             const link = document.createElement('a');
             link.href = job.url;
             link.target = '_blank';
@@ -605,10 +648,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const NS = 'http://www.w3.org/2000/svg';
 
         const bands = [
-            [80, '#34d399', '#22d3ee'],
-            [60, '#818cf8', '#c084fc'],
-            [40, '#fbbf24', '#f97316'],
-            [0,  '#fb7185', '#f43f5e'],
+            [80, '#10b981', '#14b8a6'],
+            [60, '#6366f1', '#8b5cf6'],
+            [40, '#f59e0b', '#f97316'],
+            [0,  '#f43f5e', '#e11d48'],
         ];
         const [, color1, color2] = bands.find(([min]) => score >= min);
 
@@ -750,6 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dropZone.style.display = '';  // Revert to CSS default
             jobDescription.value = '';
             charCount.textContent = '0';
+            jdSource.style.display = 'none';
 
             // Reset score ring
             document.getElementById('score-ring-fill').style.strokeDashoffset = '597';
@@ -761,5 +805,399 @@ document.addEventListener('DOMContentLoaded', () => {
                 uploadSection.classList.remove('section-enter');
             }, 700);
         }, 400);
+    });
+
+    // =====================================================================
+    // Browse jobs
+    //
+    // No CV needed: search the index, or look up any company live. Every
+    // string here comes from a job board, so it is written with textContent
+    // and links are only followed when they are plain http(s).
+    // =====================================================================
+
+    const browseList = document.getElementById('browse-list');
+    const browseCount = document.getElementById('browse-count');
+    const browseMore = document.getElementById('browse-more');
+    const browseStats = document.getElementById('browse-stats');
+    const companyList = document.getElementById('company-list');
+    const companyCount = document.getElementById('company-count');
+    const companyFilter = document.getElementById('company-filter');
+    const activeFilters = document.getElementById('active-filters');
+    const sourceSelect = document.getElementById('browse-source');
+    const lookupForm = document.getElementById('lookup-form');
+    const lookupInput = document.getElementById('lookup-input');
+    const lookupBtn = document.getElementById('lookup-btn');
+    const lookupResult = document.getElementById('lookup-result');
+
+    const browse = {
+        loaded: false, page: 1, company: '', requestId: 0,
+    };
+
+    const boardNames = {
+        greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workable: 'Workable',
+        smartrecruiters: 'SmartRecruiters', recruitee: 'Recruitee',
+        remotive: 'Remotive', arbeitnow: 'Arbeitnow',
+    };
+
+    function safeUrl(url) {
+        return /^https?:\/\//i.test(url || '') ? url : null;
+    }
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+    }
+
+    function relativeTime(iso) {
+        if (!iso) return '';
+        const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+        if (Number.isNaN(days)) return '';
+        if (days <= 0) return 'Today';
+        if (days === 1) return 'Yesterday';
+        if (days < 7) return `${days} days ago`;
+        if (days < 30) return `${Math.floor(days / 7)} wk ago`;
+        if (days < 365) return `${Math.floor(days / 30)} mo ago`;
+        return `${Math.floor(days / 365)} yr ago`;
+    }
+
+    function avatar(name) {
+        // A stable colour per company, so the same logo-less company always
+        // looks the same across the list and the drawer.
+        const node = el('span', 'avatar', (name || '?').trim().charAt(0).toUpperCase());
+        let hash = 0;
+        for (const ch of name || '') hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+        node.style.setProperty('--avatar-hue', String(Math.abs(hash) % 360));
+        return node;
+    }
+
+    function debounce(fn, ms) {
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn(...args), ms);
+        };
+    }
+
+    function ensureBrowseLoaded() {
+        if (browse.loaded) return;
+        browse.loaded = true;
+        loadBrowseStats();
+        loadCompanies();
+        runSearch(true);
+    }
+
+    async function loadBrowseStats() {
+        try {
+            const stats = await (await fetch('/jobs/stats')).json();
+            browseStats.textContent = '';
+            [
+                [stats.total, 'open roles'],
+                [stats.companies, 'companies'],
+                [stats.remote, 'remote'],
+            ].forEach(([value, label]) => {
+                const stat = el('div', 'stat');
+                stat.append(el('span', 'stat-value', (value || 0).toLocaleString()),
+                            el('span', 'stat-label', label));
+                browseStats.appendChild(stat);
+            });
+            const current = sourceSelect.value;
+            while (sourceSelect.options.length > 1) sourceSelect.remove(1);
+            Object.entries(stats.by_source || {})
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([source, count]) => {
+                    const option = el('option', null,
+                        `${boardNames[source] || source} (${count.toLocaleString()})`);
+                    option.value = source;
+                    sourceSelect.appendChild(option);
+                });
+            sourceSelect.value = current;
+        } catch {
+            browseStats.textContent = '';
+        }
+    }
+
+    async function loadCompanies() {
+        const params = new URLSearchParams({ q: companyFilter.value.trim(), limit: '80' });
+        try {
+            const data = await (await fetch(`/jobs/companies?${params}`)).json();
+            companyList.innerHTML = '';
+            companyCount.textContent = data.companies.length ? `${data.companies.length}+` : '';
+            if (!data.companies.length) {
+                companyList.appendChild(el('li', 'no-items',
+                    companyFilter.value ? 'No company matches. Try "Find a company" above.'
+                                        : 'No companies indexed yet.'));
+            }
+            data.companies.forEach(({ company, jobs }) => {
+                const item = el('li');
+                const button = el('button', 'company-item');
+                button.type = 'button';
+                button.classList.toggle('active', company === browse.company);
+                button.append(avatar(company), el('span', 'company-name', company),
+                              el('span', 'company-jobs', jobs.toLocaleString()));
+                button.addEventListener('click', () => {
+                    browse.company = browse.company === company ? '' : company;
+                    loadCompanies();
+                    runSearch(true);
+                });
+                item.appendChild(button);
+                companyList.appendChild(item);
+            });
+        } catch {
+            companyList.innerHTML = '';
+        }
+    }
+
+    function browseParams() {
+        const params = new URLSearchParams({ page: String(browse.page), per_page: '24' });
+        const add = (key, value) => { if (value) params.set(key, value); };
+        add('q', document.getElementById('browse-query').value.trim());
+        add('location', document.getElementById('browse-location').value.trim());
+        add('days', document.getElementById('browse-days').value);
+        add('source', sourceSelect.value);
+        add('sort', document.getElementById('browse-sort').value);
+        add('company', browse.company);
+        if (document.getElementById('browse-remote').checked) params.set('remote', 'true');
+        return params;
+    }
+
+    function renderActiveFilters() {
+        activeFilters.innerHTML = '';
+        if (!browse.company) return;
+        const chip = el('button', 'filter-chip');
+        chip.type = 'button';
+        chip.append(el('span', null, `Company: ${browse.company}`), el('span', 'chip-x', '×'));
+        chip.setAttribute('aria-label', `Remove company filter ${browse.company}`);
+        chip.addEventListener('click', () => {
+            browse.company = '';
+            loadCompanies();
+            runSearch(true);
+        });
+        activeFilters.appendChild(chip);
+    }
+
+    function skeletons(count) {
+        for (let i = 0; i < count; i++) {
+            const card = el('div', 'browse-card skeleton');
+            card.append(el('div', 'sk sk-avatar'), el('div', 'sk sk-line'),
+                        el('div', 'sk sk-line short'));
+            browseList.appendChild(card);
+        }
+    }
+
+    async function runSearch(reset) {
+        if (reset) {
+            browse.page = 1;
+            browseList.innerHTML = '';
+            skeletons(6);
+        }
+        renderActiveFilters();
+        const requestId = ++browse.requestId;
+        browseMore.disabled = true;
+
+        try {
+            const res = await fetch(`/jobs?${browseParams()}`);
+            const data = await res.json();
+            if (requestId !== browse.requestId) return;   // a newer search superseded this one
+            if (!res.ok) throw new Error(data.error || 'Search failed');
+
+            if (reset) browseList.innerHTML = '';
+            data.jobs.forEach((job, i) => browseList.appendChild(buildBrowseCard(job, i)));
+
+            if (!data.total) {
+                const empty = el('div', 'empty-state');
+                empty.append(
+                    el('h3', null, 'No roles match these filters'),
+                    el('p', null, 'Loosen a filter, or use "Find a company" above to pull a company’s openings live.'),
+                );
+                browseList.appendChild(empty);
+            }
+            const shown = Math.min(data.page * data.per_page, data.total);
+            browseCount.textContent = data.total
+                ? `Showing ${shown.toLocaleString()} of ${data.total.toLocaleString()} roles`
+                : '';
+            browseMore.style.display = data.has_more ? '' : 'none';
+        } catch (err) {
+            if (requestId !== browse.requestId) return;
+            browseList.innerHTML = '';
+            showError('Could not load jobs. Please try again.');
+        } finally {
+            browseMore.disabled = false;
+        }
+    }
+
+    function buildBrowseCard(job, index) {
+        const card = el('article', 'browse-card');
+        card.tabIndex = 0;
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', `${job.title} at ${job.company}`);
+        card.style.animationDelay = `${Math.min(index * 0.03, 0.4)}s`;
+
+        const head = el('div', 'browse-card-head');
+        const titles = el('div', 'browse-card-titles');
+        titles.append(el('h3', 'browse-title', job.title), el('p', 'browse-company', job.company));
+        head.append(avatar(job.company), titles);
+        const posted = relativeTime(job.posted_at);
+        if (posted) head.appendChild(el('span', 'browse-posted', posted));
+
+        const meta = el('div', 'browse-meta');
+        if (job.location) meta.appendChild(el('span', 'meta-item meta-location', job.location));
+        if (job.remote) meta.appendChild(el('span', 'pill pill-remote', 'Remote'));
+        meta.appendChild(el('span', 'pill pill-source', boardNames[job.source] || job.source));
+        (job.tags || []).slice(0, 2).forEach((tag) => meta.appendChild(el('span', 'pill', tag)));
+
+        card.append(head, meta, el('p', 'browse-snippet', job.snippet));
+
+        const open = () => openDrawer(job.id);
+        card.addEventListener('click', open);
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        });
+        return card;
+    }
+
+    const rerun = debounce(() => runSearch(true), 300);
+    ['browse-query', 'browse-location'].forEach((id) =>
+        document.getElementById(id).addEventListener('input', rerun));
+    ['browse-days', 'browse-source', 'browse-sort', 'browse-remote'].forEach((id) =>
+        document.getElementById(id).addEventListener('change', () => runSearch(true)));
+    companyFilter.addEventListener('input', debounce(loadCompanies, 250));
+    browseMore.addEventListener('click', () => {
+        browse.page += 1;
+        runSearch(false);
+    });
+
+    // --- Company lookup: any company, straight from its job board ---
+    lookupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const company = lookupInput.value.trim();
+        if (company.length < 2) {
+            showError('Enter a company name or a careers-page URL.');
+            return;
+        }
+        lookupBtn.disabled = true;
+        lookupBtn.querySelector('.btn-label').textContent = 'Searching boards…';
+        lookupBtn.querySelector('.spinner').style.display = 'inline-block';
+        progressBar.classList.add('active');
+
+        try {
+            const res = await fetch('/jobs/lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ company }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Lookup failed.');
+
+            lookupResult.style.display = 'flex';
+            lookupResult.textContent = '';
+            lookupResult.className = `lookup-result ${data.found ? 'found' : 'missing'}`;
+            if (data.found) {
+                const boards = data.boards.map((b) => boardNames[b.ats] || b.ats).join(', ');
+                lookupResult.append(
+                    el('strong', null, `${data.total.toLocaleString()} open roles at ${data.company}`),
+                    el('span', null, `Live from ${boards}${data.cached ? ' · checked recently' : ''}`),
+                );
+                browse.company = data.company;
+                loadBrowseStats();
+                loadCompanies();
+                runSearch(true);
+            } else {
+                lookupResult.append(
+                    el('strong', null, `No open roles found for “${company}”`),
+                    el('span', null, 'We checked Greenhouse, Lever, Ashby, Workable, SmartRecruiters and ' +
+                       'Recruitee. Try the exact company name, or paste the URL of its careers page.'),
+                );
+            }
+        } catch (err) {
+            showError(err.message || 'Lookup failed. Please try again.');
+        } finally {
+            lookupBtn.disabled = false;
+            lookupBtn.querySelector('.btn-label').textContent = 'Get open roles';
+            lookupBtn.querySelector('.spinner').style.display = 'none';
+            progressBar.classList.remove('active');
+        }
+    });
+
+    // --- Job detail drawer ---
+    const drawer = document.getElementById('job-drawer');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+    let drawerJob = null;
+    let lastFocus = null;
+
+    async function openDrawer(jobId) {
+        lastFocus = document.activeElement;
+        drawerJob = null;
+        document.getElementById('drawer-title').textContent = 'Loading…';
+        document.getElementById('drawer-company').textContent = '';
+        document.getElementById('drawer-meta').innerHTML = '';
+        document.getElementById('drawer-body').textContent = '';
+        drawerBackdrop.hidden = false;
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('drawer-open');
+        document.getElementById('drawer-close').focus();
+
+        try {
+            const res = await fetch(`/jobs/detail?${new URLSearchParams({ id: jobId })}`);
+            const job = await res.json();
+            if (!res.ok) throw new Error(job.error);
+            drawerJob = job;
+
+            document.getElementById('drawer-title').textContent = job.title;
+            document.getElementById('drawer-company').textContent = job.company;
+            const avatarSlot = document.getElementById('drawer-avatar');
+            const fresh = avatar(job.company);
+            avatarSlot.textContent = fresh.textContent;
+            avatarSlot.style.setProperty('--avatar-hue', fresh.style.getPropertyValue('--avatar-hue'));
+
+            const meta = document.getElementById('drawer-meta');
+            if (job.location) meta.appendChild(el('span', 'meta-item meta-location', job.location));
+            if (job.remote) meta.appendChild(el('span', 'pill pill-remote', 'Remote'));
+            meta.appendChild(el('span', 'pill pill-source', boardNames[job.source] || job.source));
+            const posted = relativeTime(job.posted_at);
+            if (posted) meta.appendChild(el('span', 'pill', `Posted ${posted.toLowerCase()}`));
+            (job.tags || []).slice(0, 4).forEach((tag) => meta.appendChild(el('span', 'pill', tag)));
+
+            const apply = document.getElementById('drawer-apply');
+            const url = safeUrl(job.url);
+            apply.style.display = url ? '' : 'none';
+            if (url) apply.href = url;
+
+            document.getElementById('drawer-body').textContent = job.description;
+        } catch (err) {
+            document.getElementById('drawer-title').textContent = 'This posting is no longer available';
+        }
+    }
+
+    function closeDrawer() {
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+        drawerBackdrop.hidden = true;
+        document.body.classList.remove('drawer-open');
+        if (lastFocus) lastFocus.focus();
+    }
+
+    document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+    drawerBackdrop.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+    });
+
+    // One click from any posting to a full evidence-backed screening of it.
+    document.getElementById('drawer-check').addEventListener('click', () => {
+        if (!drawerJob) return;
+        const job = drawerJob;
+        jobDescription.value = [
+            job.title, [job.company, job.location].filter(Boolean).join(' · '), '', job.description,
+        ].join('\n');
+        charCount.textContent = jobDescription.value.length;
+        closeDrawer();
+        setMode('check');
+        jdSource.textContent = `Loaded: ${job.title} at ${job.company}`;
+        jdSource.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (!selectedFile) dropZone.focus();
     });
 });
