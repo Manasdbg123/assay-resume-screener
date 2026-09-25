@@ -139,13 +139,14 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/jobs/stats');
             const stats = await res.json();
-            if (!stats.embedded) {
-                jobIndexNote.textContent =
-                    'No jobs indexed yet. Run: python -m resumescreener.jobs.ingest';
+            if (!stats.total) {
+                jobIndexNote.textContent = stats.refreshing
+                    ? 'Fetching live jobs from company boards. Try again in a minute.'
+                    : 'No jobs indexed yet. Run: python -m resumescreener.jobs.ingest';
                 jobIndexNote.classList.add('warn');
             } else {
                 jobIndexNote.textContent =
-                    `Searching ${stats.embedded.toLocaleString()} indexed postings.`;
+                    `Searching ${stats.total.toLocaleString()} live postings.`;
                 jobIndexNote.classList.remove('warn');
             }
         } catch {
@@ -880,10 +881,10 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function ensureBrowseLoaded() {
+    async function ensureBrowseLoaded() {
         if (browse.loaded) return;
         browse.loaded = true;
-        loadBrowseStats();
+        await loadBrowseStats();
         loadCompanies();
         runSearch(true);
     }
@@ -891,6 +892,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadBrowseStats() {
         try {
             const stats = await (await fetch('/jobs/stats')).json();
+            browse.refreshing = Boolean(stats.refreshing);
             browseStats.textContent = '';
             [
                 [stats.total, 'open roles'],
@@ -1007,10 +1009,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!data.total) {
                 const empty = el('div', 'empty-state');
-                empty.append(
-                    el('h3', null, 'No roles match these filters'),
-                    el('p', null, 'Loosen a filter, or use "Find a company" above to pull a company’s openings live.'),
-                );
+                if (browse.refreshing && !browseParams().has('q') && !browse.company) {
+                    empty.append(
+                        el('h3', null, 'Fetching live jobs…'),
+                        el('p', null, 'The server is pulling current openings from company job boards. ' +
+                           'This takes a minute or two after a restart. Reload the page shortly.'),
+                    );
+                } else {
+                    empty.append(
+                        el('h3', null, 'No roles match these filters'),
+                        el('p', null, 'Loosen a filter, or use "Find a company" above to pull a company’s openings live.'),
+                    );
+                }
                 browseList.appendChild(empty);
             }
             const shown = Math.min(data.page * data.per_page, data.total);

@@ -77,6 +77,12 @@ class Config:
     job_llm_concurrency: int = field(default_factory=lambda: _int("JOB_LLM_CONCURRENCY", 5))
     # A company looked up in the Browse tab is re-fetched from its board after
     # this long; within it, repeat searches answer from SQLite.
+    # Fetch every configured board in the background at startup and then every
+    # N hours. 0 (the default) leaves ingest to the CLI or a CronJob; a single
+    # hosted instance with no scheduler sets this so its jobs stay current.
+    job_refresh_hours: float = field(
+        default_factory=lambda: float(os.environ.get("JOB_REFRESH_HOURS", "0") or 0)
+    )
     job_lookup_cache_hours: int = field(
         default_factory=lambda: _int("JOB_LOOKUP_CACHE_HOURS", 6)
     )

@@ -222,14 +222,19 @@ class JobStore:
         remote_only: bool = False,
         sources: list[str] | None = None,
         limit: int = 5000,
+        embedded_only: bool = True,
     ) -> tuple[list[JobPosting], np.ndarray | None]:
         """
         Load candidate postings and their embedding matrix.
 
         The matrix comes back as one (n, dim) array so ranking is a single matrix
-        multiply rather than n separate cosine calls.
+        multiply rather than n separate cosine calls. With embedded_only=False every
+        posting is returned and the matrix is None - the keyword-ranking path, for
+        a deployment with no embedding key.
         """
-        query = "SELECT * FROM jobs WHERE embedding IS NOT NULL"
+        query = "SELECT * FROM jobs WHERE " + (
+            "embedding IS NOT NULL" if embedded_only else "1=1"
+        )
         params: list = []
         if remote_only:
             query += " AND remote = 1"
@@ -246,6 +251,8 @@ class JobStore:
             return [], None
 
         postings = [_row_to_posting(row) for row in rows]
+        if not embedded_only:
+            return postings, None
         matrix = np.vstack([
             np.frombuffer(row["embedding"], dtype=np.float32) for row in rows
         ])

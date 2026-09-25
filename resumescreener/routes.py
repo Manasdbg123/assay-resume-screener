@@ -6,6 +6,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 
 from .jobs import JobStore, match_jobs
 from .jobs.lookup import CompanyLookupError, lookup_company
+from .jobs.refresh import refresh_status
 from .jobs.sources import ATS_FETCHERS
 from .parsing import ParsingError, extract_text
 from .screener import screen_resume
@@ -120,10 +121,11 @@ def match():
         )
 
     store = _job_store(config)
-    if store.count(embedded_only=True) == 0:
+    if store.count() == 0:
         return jsonify({
-            "error": "No job postings are indexed yet. Run "
-                     "'python -m resumescreener.jobs.ingest' to fetch and embed jobs."
+            "error": "No job postings are stored yet. They are fetched automatically "
+                     "when job refresh is on; otherwise run "
+                     "'python -m resumescreener.jobs.ingest'."
         }), 503
 
     remote_only = request.form.get("remote_only", "").strip().lower() in {"1", "true", "yes"}
@@ -167,7 +169,7 @@ def match():
 def job_stats():
     """What is in the job index - useful for checking whether ingest has run."""
     config = current_app.config["APP_CONFIG"]
-    return jsonify(_job_store(config).stats())
+    return jsonify({**_job_store(config).stats(), **refresh_status(config.job_db_path)})
 
 
 def _job_summary(job) -> dict:

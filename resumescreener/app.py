@@ -8,6 +8,7 @@ from flask import Flask, g, jsonify, render_template, request
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from .config import Config, load_config
+from .jobs.refresh import start_background_refresh
 from .logging_config import configure_logging
 from .parsing import ParsingError
 from .routes import api
@@ -33,6 +34,9 @@ def create_app(config: Config = None) -> Flask:
     app.config["APP_CONFIG"] = config
 
     app.register_blueprint(api)
+
+    # Hosted single-instance deployments keep their jobs current themselves.
+    start_background_refresh(config)
 
     @app.before_request
     def _start_timer():

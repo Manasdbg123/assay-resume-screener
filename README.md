@@ -31,6 +31,7 @@ repository rather than a claim in a README.
 - [Quick start (no Docker)](#quick-start-no-docker)
 - [Running without Docker](#running-without-docker)
 - [Running the full stack with Docker](#running-the-full-stack-with-docker)
+- [Deploying to Render](#deploying-to-render)
 - [Deploying to Kubernetes](#deploying-to-kubernetes)
 - [Observability](#observability)
 - [Configuration](#configuration)
@@ -345,6 +346,23 @@ and Filebeat decodes it at the edge.
 
 ---
 
+## Deploying to Render
+
+[`render.yaml`](render.yaml) deploys the app as a single web service, on the free plan:
+
+1. Sign in at [render.com](https://render.com) with GitHub.
+2. **New → Blueprint**, pick this repository, and click **Apply**.
+3. Optionally add `GEMINI_API_KEY` under the service's **Environment** tab for AI scoring.
+   Without it every feature still works, with keyword scoring.
+
+The service sets `JOB_REFRESH_HOURS=6`, so it fetches real openings from every board in
+`companies.json` when it starts and every six hours after. On the free plan the disk is
+wiped on restart and the instance sleeps when idle, so the first visit after a sleep
+takes about 30 seconds and the job list refills within a minute or two. The Browse tab
+says so while it does, and **Find a company** always fetches live regardless.
+
+---
+
 ## Deploying to Kubernetes
 
 ```bash
@@ -407,6 +425,7 @@ Environment-driven, loaded from `.env` when present — see [`.env.example`](.en
 | `LOG_FILE` | — | Also write JSON logs to a rotating file |
 | `JSON_LOGS` | `true` | `false` for readable local development logs |
 | `JOB_DB_PATH` | `data/jobs.db` | SQLite file holding postings, embeddings and lookups |
+| `JOB_REFRESH_HOURS` | `0` | Fetch every board in the background at startup and every N hours; `0` leaves it to the CLI or CronJob |
 | `JOB_LOOKUP_CACHE_HOURS` | `6` | How long a company lookup is answered from the store before re-fetching |
 
 ---
